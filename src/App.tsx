@@ -2,12 +2,13 @@
 import { AuthProvider } from './auth/AuthContext'
 import { ThemeProvider } from './hooks/useTheme'
 import Protected from './components/Protected'
+import RoleGuard from './components/RoleGuard'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Registro from './pages/Registro'
 import SeleccionarRol from './pages/SeleccionarRol'
 import Usuario from './pages/Usuario'
-import OperadorPlaceholder from './pages/OperadorPlaceholder'
+import OperadorDashboard from './pages/OperadorDashboard'
 
 function App() {
   return (
@@ -21,8 +22,26 @@ function App() {
           {/* Alias legacy */}
           <Route path="/registrarse" element={<Navigate to="/registro" replace />} />
           <Route path="/seleccionar-rol" element={<Protected><SeleccionarRol /></Protected>} />
-          <Route path="/usuario" element={<Protected><Usuario /></Protected>} />
-          <Route path="/operador/dashboard" element={<Protected><OperadorPlaceholder /></Protected>} />
+          <Route
+            path="/usuario"
+            element={
+              <Protected>
+                <RoleGuard requiredRole="usuario">
+                  <Usuario />
+                </RoleGuard>
+              </Protected>
+            }
+          />
+          <Route
+            path="/operador/dashboard"
+            element={
+              <Protected>
+                <RoleGuard requiredRole="operador">
+                  <OperadorDashboard />
+                </RoleGuard>
+              </Protected>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

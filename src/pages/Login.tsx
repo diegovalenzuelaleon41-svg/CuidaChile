@@ -1,21 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, Fingerprint, ShieldCheck, ArrowRight, AlertCircle, Loader2, Sun, Moon } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../hooks/useTheme'
 import Logo from '../components/Logo'
 
 export default function Login() {
   const { session, signIn } = useAuth()
-  const { esOscuro, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [bioBusy, setBioBusy] = useState(false)
-  const [bioError, setBioError] = useState(false)
 
   if (session) return <Navigate to="/seleccionar-rol" replace />
 
@@ -29,22 +27,25 @@ export default function Login() {
     else navigate('/seleccionar-rol', { replace: true })
   }
 
-  async function onBiometric() {
-    setBioBusy(true)
-    setBioError(false)
-    await new Promise((r) => setTimeout(r, 1500))
-    setBioBusy(false)
-    setBioError(true)
+  async function handleGoogleLogin() {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/login`,
+        },
+      })
+      if (error) throw error
+    } catch (err) {
+      alert('No se pudo iniciar sesión con Google. Intenta de nuevo.')
+      console.error(err)
+    }
   }
 
   return (
     <main className="min-h-screen flex items-center justify-center p-5 bg-[radial-gradient(ellipse_at_top,#EFF6FF_0%,#FFFFFF_60%)] dark:bg-none dark:bg-slate-950">
       <div className="w-full max-w-[420px]">
         <div className="card p-8 md:p-12 relative">
-          <button type="button" onClick={toggleTheme} aria-label={esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} title={esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center hover:bg-canvas dark:hover:bg-slate-800 text-[#64748B] dark:text-slate-400">
-            {esOscuro ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
           <div className="flex flex-col items-center mb-8">
             <Logo size={64} />
             <p className="mt-3 text-[14px] text-[#64748B] dark:text-slate-400 text-center">
@@ -94,13 +95,18 @@ export default function Login() {
             <div className="flex-1 h-px bg-[#E2E8F0] dark:bg-slate-700" />
           </div>
 
-          <div className="flex flex-col items-center gap-2">
-            <button type="button" onClick={onBiometric} disabled={bioBusy}
-              aria-label="Iniciar sesión con huella dactilar"
-              className="w-14 h-14 rounded-full border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-[#2563EB] hover:bg-[#EFF6FF] dark:hover:bg-slate-700 hover:scale-105 transition-all disabled:opacity-60">
-              {bioBusy ? <Loader2 size={24} className="animate-spin" /> : <Fingerprint size={28} strokeWidth={1.5} />}
+          <div className="w-full flex flex-col items-center gap-2">
+            <button type="button" onClick={handleGoogleLogin}
+              aria-label="Iniciar sesión con Google"
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-[#1E293B] font-medium text-[14px] hover:bg-[#F8FAFC] transition-colors dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-5.06 3.28-8.09" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.65H2.18v2.84C3.99 20.53 7.7 23 12 23" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07h2.66v1.3c-.21.53-.34 1.1-.34 1.77s.13 1.24.35 1.77z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.49 4.22 1.36l-3.15 2.65c-.87-.58-1.84-.91-2.89-.91-2.26 0-4.11 1.6-4.43 3.76H2.18v2.84c3.11-1.69 5.35-3.96 6.8-4.65z" fill="#EA4335" />
+              </svg>
+              <span>Continuar con Google</span>
             </button>
-            {bioError && <p className="text-[12px] text-[#DC2626]">No se pudo verificar la huella</p>}
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-2 text-[#94A3B8] dark:text-slate-500">
