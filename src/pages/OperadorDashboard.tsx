@@ -252,30 +252,33 @@ export default function OperadorDashboard() {
   return (
     <main className="h-screen bg-white flex flex-col overflow-hidden">
       {/* ── 1. Header Superior (64px) ── */}
-      <header className="h-16 shrink-0 bg-white border-b border-[#E2E8F0] flex items-center justify-between px-6 z-20">
-        <div className="flex items-center gap-3">
+      <header className="h-16 shrink-0 bg-white border-b border-[#E2E8F0] flex items-center justify-between gap-4 md:gap-6 w-full px-4 md:px-6 z-20">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={() => navigate('/')}
             aria-label="Volver al inicio"
-            className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[#64748B] text-sm font-medium hover:bg-[#F1F5F9] hover:text-heading transition-colors"
+            className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-[10px] text-[#64748B] text-sm font-medium hover:bg-[#F1F5F9] hover:text-heading transition-colors"
           >
             <ArrowLeft size={18} strokeWidth={2} />
-            <span>Inicio</span>
+            <span className="hidden md:block">Inicio</span>
           </button>
-          <Logo size={34} />
-          <span className="text-[18px] font-bold text-heading tracking-tight">
+          <div className="shrink-0">
+            <Logo size={34} />
+          </div>
+          <span className="hidden lg:block truncate text-[18px] font-bold text-heading tracking-tight">
             Panel de Operador
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#DCFCE7] text-[#15803D] text-xs font-medium border border-[#86EFAC]">
-            🟢 En línea
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full bg-[#DCFCE7] text-[#15803D] text-xs font-medium border border-[#86EFAC]">
+            <span className="w-2 h-2 shrink-0 rounded-full bg-[#22C55E]" aria-hidden />
+            En línea
           </span>
           <button
             type="button"
             onClick={() => navigate('/seleccionar-rol')}
-            className="flex items-center gap-2 px-4 py-2 rounded-[10px] border border-[#E2E8F0] text-[#64748B] text-sm font-medium hover:bg-[#F1F5F9] transition-colors"
+            className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-[10px] border border-[#E2E8F0] text-[#64748B] text-sm font-medium hover:bg-[#F1F5F9] transition-colors"
           >
             Cerrar Turno
           </button>

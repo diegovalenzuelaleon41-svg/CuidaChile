@@ -1,4 +1,4 @@
-import { Bell, Moon, Sun } from 'lucide-react'
+import { Bell, LogOut, Moon, Sun } from 'lucide-react'
 import Logo from '../Logo'
 import { useTheme } from '../../hooks/useTheme'
 
@@ -17,16 +17,26 @@ export default function DashboardHeader({ nombre, alertaActiva, protegido, onSig
         alertaActiva ? 'bg-sos border-sos text-white' : 'bg-white/95 border-line dark:bg-slate-900/95 dark:border-slate-700'
       }`}
     >
-      <div className="mx-auto w-full max-w-6xl px-4 md:px-6 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Logo size={36} />
-          <span className="hidden sm:block w-px h-8 bg-line dark:bg-slate-700" aria-hidden />
+      <div className="mx-auto w-full max-w-6xl px-4 md:px-6 py-3 flex items-center justify-between gap-3 sm:gap-6">
+        <div className="flex items-center gap-2 min-[420px]:gap-3 min-w-0">
+          <div className="shrink-0">
+            <Logo size={36} />
+          </div>
+          <span
+            className={`sm:hidden shrink-0 inline-flex items-center gap-1.5 rounded-full px-2 min-[420px]:px-3 py-1 text-[12px] font-semibold whitespace-nowrap ${
+              alertaActiva ? 'bg-white text-sos' : 'bg-[#ECFDF5] text-[#059669]'
+            }`}
+          >
+            <span className={`w-2 h-2 shrink-0 rounded-full ${alertaActiva ? 'bg-sos animate-pulse' : 'bg-ok animate-pulse'}`} />
+            <span className="max-[419px]:sr-only">{alertaActiva ? 'ALERTA' : 'Protegido'}</span>
+          </span>
+          <span className="hidden sm:block shrink-0 w-px h-8 bg-line dark:bg-slate-700" aria-hidden />
           <div className="hidden sm:block min-w-0">
             <p className={`text-[15px] font-bold leading-tight truncate ${alertaActiva ? 'text-white' : 'text-heading dark:text-white'}`}>
               {nombre}
             </p>
             <p
-              className={`text-[12px] font-semibold flex items-center gap-1.5 ${
+              className={`text-[12px] font-semibold flex items-center gap-1.5 whitespace-nowrap ${
                 alertaActiva ? 'text-white' : protegido ? 'text-[#059669]' : 'text-muted dark:text-slate-400'
               }`}
             >
@@ -39,15 +49,7 @@ export default function DashboardHeader({ nombre, alertaActiva, protegido, onSig
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <span
-            className={`sm:hidden inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold ${
-              alertaActiva ? 'bg-white text-sos' : 'bg-[#ECFDF5] text-[#059669]'
-            }`}
-          >
-            <span className={`w-2 h-2 rounded-full ${alertaActiva ? 'bg-sos animate-pulse' : 'bg-ok animate-pulse'}`} />
-            {alertaActiva ? 'ALERTA' : 'Protegido'}
-          </span>
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           <button
             onClick={toggleTheme}
             aria-pressed={esOscuro}
@@ -69,9 +71,13 @@ export default function DashboardHeader({ nombre, alertaActiva, protegido, onSig
           </button>
           <button
             onClick={onSignOut}
-            className={`text-[12px] font-semibold px-2 py-2 ${alertaActiva ? 'text-white' : 'text-muted dark:text-slate-400'}`}
+            aria-label="Cerrar sesión"
+            className={`h-10 min-w-10 rounded-full sm:rounded-lg flex items-center justify-center gap-1.5 px-2 text-[12px] font-semibold transition-colors ${
+              alertaActiva ? 'text-white hover:bg-white/10' : 'text-muted dark:text-slate-400 hover:bg-canvas dark:hover:bg-slate-800'
+            }`}
           >
-            Salir
+            <LogOut size={18} className="sm:hidden" />
+            <span className="hidden sm:block">Salir</span>
           </button>
         </div>
       </div>

@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
-import { useTheme } from '../hooks/useTheme'
 import Logo from '../components/Logo'
 
 export default function Login() {
@@ -43,7 +42,13 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-5 bg-[radial-gradient(ellipse_at_top,#EFF6FF_0%,#FFFFFF_60%)] dark:bg-none dark:bg-slate-950">
+    <main className="relative min-h-screen flex items-center justify-center px-5 pt-16 pb-5 md:p-5 bg-[radial-gradient(ellipse_at_top,#EFF6FF_0%,#FFFFFF_60%)] dark:bg-none dark:bg-slate-950">
+      <Link to="/"
+        className="absolute top-4 left-4 md:top-6 md:left-6 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-[14px] font-medium text-gray-500 hover:text-blue-600 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:text-slate-400 dark:hover:text-[#93C5FD] group">
+        <ArrowLeft size={18} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
+        <span>Volver al inicio</span>
+      </Link>
+
       <div className="w-full max-w-[420px]">
         <div className="card p-8 md:p-12 relative">
           <div className="flex flex-col items-center mb-8">
@@ -98,12 +103,12 @@ export default function Login() {
           <div className="w-full flex flex-col items-center gap-2">
             <button type="button" onClick={handleGoogleLogin}
               aria-label="Iniciar sesión con Google"
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-[#1E293B] font-medium text-[14px] hover:bg-[#F8FAFC] transition-colors dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-5.06 3.28-8.09" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.65H2.18v2.84C3.99 20.53 7.7 23 12 23" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07h2.66v1.3c-.21.53-.34 1.1-.34 1.77s.13 1.24.35 1.77z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.49 4.22 1.36l-3.15 2.65c-.87-.58-1.84-.91-2.89-.91-2.26 0-4.11 1.6-4.43 3.76H2.18v2.84c3.11-1.69 5.35-3.96 6.8-4.65z" fill="#EA4335" />
+              className="group relative w-full flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-[14px] sm:text-[15px] font-medium text-gray-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400/60 dark:focus-visible:ring-offset-slate-900">
+              <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden className="absolute left-4 sm:left-5">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
               </svg>
               <span>Continuar con Google</span>
             </button>
