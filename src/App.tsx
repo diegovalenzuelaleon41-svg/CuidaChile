@@ -7,6 +7,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Registro from './pages/Registro'
 import SeleccionarRol from './pages/SeleccionarRol'
+import AuthCallback from './pages/AuthCallback'
 import Usuario from './pages/Usuario'
 import OperadorDashboard from './pages/OperadorDashboard'
 
@@ -21,7 +22,8 @@ function App() {
           <Route path="/registro" element={<Registro />} />
           {/* Alias legacy */}
           <Route path="/registrarse" element={<Navigate to="/registro" replace />} />
-          <Route path="/seleccionar-rol" element={<Protected><SeleccionarRol /></Protected>} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/seleccionar-rol"element={<Protected><SeleccionarRol /></Protected>} />
           <Route
             path="/usuario"
             element={

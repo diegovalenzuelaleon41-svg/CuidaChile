@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { User, Mail, Lock, Eye, EyeOff, Phone, MapPin, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { useTheme } from '../hooks/useTheme'
 import { supabase } from '../lib/supabase'
 import { COMUNAS_SANTIAGO } from '../lib/comunas'
 import Logo from '../components/Logo'
@@ -23,7 +22,8 @@ export default function Registro() {
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (session) return <Navigate to="/seleccionar-rol" replace />
+  // Ya autenticado: /auth/callback consulta perfil.rol y redirige a su panel.
+  if (session) return <Navigate to="/auth/callback" replace />
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -68,7 +68,7 @@ export default function Registro() {
     if (needsConfirmation) {
       setInfo(`Te enviamos un correo de confirmación a ${email.trim()}. Revisa tu bandeja para activar tu cuenta.`)
     } else {
-      navigate('/seleccionar-rol', { replace: true })
+      navigate('/auth/callback', { replace: true })
     }
   }
 

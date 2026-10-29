@@ -1,40 +1,31 @@
 /**
- * RoleGuard — protege rutas privadas verificando el rol persistido.
- * Si no hay rol, redirige a /seleccionar-rol.
- * Si se requiere un rol específico y no coincide, redirige al dashboard correcto.
+ * RoleGuard — protege los paneles según perfil.rol (equivalente al
+ * middleware de Next.js en esta app Vite). Va dentro de <Protected>, que ya
+ * garantiza sesión.
+ *
+ * · Sin rol            → /seleccionar-rol
+ * · Rol distinto       → su propio panel (usuario ↔ operador)
+ *
+ * Es solo UX: la protección real de los datos está en RLS y en asignar_rol().
  */
 
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import type { ReactElement } from 'react'
-import { useRole, type Role } from '../hooks/useRole'
+import { useAuth } from '../auth/AuthContext'
+import { rutaPorRol, type Rol } from '../lib/roles'
+import { PantallaCarga, PantallaError } from './EstadoPantalla'
 
 interface RoleGuardProps {
   children: ReactElement
-  /** Rol requerido para acceder a esta ruta. Si se omite, solo se requiere tener algún rol. */
-  requiredRole?: Role
+  requiredRole: Rol
 }
 
 export default function RoleGuard({ children, requiredRole }: RoleGuardProps) {
-  const { role, loading } = useRole()
-  const navigate = useNavigate()
+  const { rol, rolLoading, rolError, recargarRol } = useAuth()
 
-  while (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <div className="w-10 h-10 rounded-full border-4 border-[#DBEAFE] border-t-[#2563EB] animate-spin" />
-      </div>
-    )
-  }
-
-  if (!role) {
-    return <Navigate to="/seleccionar-rol" replace />
-  }
-
-  if (requiredRole && role !== requiredRole) {
-    const target = role === 'operador' ? '/operador/dashboard' : '/usuario'
-    navigate(target, { replace: true })
-    return null
-  }
+  if (rolLoading) return <PantallaCarga />
+  if (rolError) return <PantallaError mensaje={rolError} onReintentar={recargarRol} />
+  if (rol !== requiredRole) return <Navigate to={rutaPorRol(rol)} replace />
 
   return children
 }

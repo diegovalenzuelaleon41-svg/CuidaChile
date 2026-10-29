@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
@@ -8,36 +8,42 @@ import Logo from '../components/Logo'
 export default function Login() {
   const { session, signIn } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // AuthCallback reenvía aquí el error si el usuario canceló en Google.
+  const [error, setError] = useState<string | null>(
+    (location.state as { error?: string } | null)?.error ?? null
+  )
   const [busy, setBusy] = useState(false)
 
-  if (session) return <Navigate to="/seleccionar-rol" replace />
+  // Ya autenticado: /auth/callback consulta perfil.rol y redirige a su panel.
+  if (session) return <Navigate to="/auth/callback" replace />
 
-  async function onSubmit(e: FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     const err = await signIn(email.trim(), password)
     setBusy(false)
     if (err) setError(err)
-    else navigate('/seleccionar-rol', { replace: true })
+    else navigate('/auth/callback', { replace: true })
   }
 
   async function handleGoogleLogin() {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/login`,
-        },
-      })
-      if (error) throw error
-    } catch (err) {
-      alert('No se pudo iniciar sesión con Google. Intenta de nuevo.')
-      console.error(err)
+    setError(null)
+    // Supabase redirige a Google y vuelve a /auth/callback, que resuelve el rol.
+    // Esa URL debe estar en Authentication → URL Configuration → Redirect URLs.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) {
+      console.error(error)
+      setError('No se pudo iniciar sesión con Google. Intenta de nuevo.')
     }
   }
 
@@ -58,7 +64,7 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+          <form onSubmit={handleLogin} className="flex flex-col gap-5" noValidate>
             <div>
               <label htmlFor="email" className="label-cuida mb-2">Correo Electrónico</label>
               <div className="relative">
