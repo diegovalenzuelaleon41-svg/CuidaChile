@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
+import { guardarTerminosPendientes } from '../lib/terminos'
 import { useAuth } from '../auth/AuthContext'
 import { rutaPorRol } from '../lib/roles'
 import { PantallaCarga, PantallaError } from '../components/EstadoPantalla'
@@ -15,6 +17,12 @@ import { PantallaCarga, PantallaError } from '../components/EstadoPantalla'
  */
 export default function AuthCallback() {
   const { session, loading, rolLoading, rol, estadoOperador, rolError, recargarRol } = useAuth()
+  const uid = session?.user.id
+
+  // Consentimiento aceptado en /registro antes de ir a Google.
+  useEffect(() => {
+    if (uid) void guardarTerminosPendientes(uid)
+  }, [uid])
 
   // Google devuelve ?error=…&error_description=… (o en el hash) si el usuario cancela.
   const params = new URLSearchParams(window.location.search || window.location.hash.slice(1))

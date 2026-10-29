@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
+import type { PostgrestError, Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { esEstadoOperadorValido, esRolValido, type EstadoOperador, type Rol } from '../lib/roles'
 
@@ -37,6 +37,59 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const ERROR_RED = 'No pudimos conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
+const ERROR_SERVIDOR = 'No pudimos cargar tu perfil por un problema del servidor. Intenta de nuevo en unos minutos.'
+
+/** supabase-js no trae code cuando falla el fetch (sin internet, DNS, CORS). */
+function esErrorDeRed(error: PostgrestError) {
+  return !error.code || /failed to fetch|network|load failed/i.test(error.message)
+}
+
+/**
+ * Lee rol y operador_estado de perfil. Si la fila no existe (el trigger
+ * crear_perfil_usuario_nuevo falló al registrarse), la crea con rol NULL:
+ * rutaPorRol() manda entonces a /seleccionar-rol.
+ */
+async function cargarPerfil(user: User): Promise<EstadoRol> {
+  const sinRol: EstadoRol = { userId: user.id, rol: null, estadoOperador: null, error: null }
+
+  const { data, error } = await supabase
+    .from('perfil')
+    .select('rol, operador_estado')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (error) {
+    // Ej.: 42703 = columna inexistente (falta aplicar una migración).
+    console.error('[perfil] error al cargar:', error.code, error.message)
+    return { ...sinRol, error: esErrorDeRed(error) ? ERROR_RED : ERROR_SERVIDOR }
+  }
+
+  if (data) {
+    return {
+      ...sinRol,
+      rol: esRolValido(data.rol) ? data.rol : null,
+      estadoOperador: esEstadoOperadorValido(data.operador_estado) ? data.operador_estado : null,
+    }
+  }
+
+  // Sin fila. rol no se envía: proteger_rol_perfil() lo fuerza a NULL igual.
+  // email y nombre son NOT NULL en perfil.
+  const meta = user.user_metadata ?? {}
+  const nombre = meta.full_name || meta.name || user.email?.split('@')[0] || 'Usuario'
+  const email = user.email ?? `usuario-${user.id}@cuidachile.local`
+  const { error: errInsert } = await supabase
+    .from('perfil')
+    .upsert({ id: user.id, nombre, email }, { onConflict: 'id', ignoreDuplicates: true })
+
+  if (errInsert) {
+    console.error('[perfil] no se pudo crear:', errInsert.code, errInsert.message)
+    if (esErrorDeRed(errInsert)) return { ...sinRol, error: ERROR_RED }
+    // Si RLS no permite insertar, /seleccionar-rol mostrará el error de asignar_rol().
+  }
+  return sinRol
+}
+
 function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -67,22 +120,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
   // con el mismo id y no debe volver a consultar.
   const userId = user?.id
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !user) return
     let activo = true
-    supabase
-      .from('perfil')
-      .select('rol, operador_estado')
-      .eq('id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!activo) return
-        setEstadoRol({
-          userId,
-          rol: esRolValido(data?.rol) ? data.rol : null,
-          estadoOperador: esEstadoOperadorValido(data?.operador_estado) ? data.operador_estado : null,
-          error: error ? 'No pudimos cargar tu perfil. Revisa tu conexión e intenta de nuevo.' : null,
-        })
-      })
+    cargarPerfil(user).then((estado) => {
+      if (activo) setEstadoRol(estado)
+    })
     return () => { activo = false }
   }, [userId, intentoRol])
 
