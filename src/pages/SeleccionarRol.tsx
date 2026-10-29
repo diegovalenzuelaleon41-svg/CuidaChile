@@ -9,14 +9,14 @@ import { rutaPorRol, type Rol } from '../lib/roles'
 
 export default function SeleccionarRol() {
   const { esOscuro, toggleTheme } = useTheme()
-  const { rol, rolLoading, rolError, recargarRol, asignarRol } = useAuth()
+  const { rol, estadoOperador, rolLoading, rolError, recargarRol, asignarRol } = useAuth()
   const [enviando, setEnviando] = useState<Rol | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // El rol es definitivo: quien ya lo tiene nunca vuelve a ver esta pantalla.
   // También cubre el momento justo después de elegir: asignarRol actualiza el
   // contexto, este componente se vuelve a renderizar y redirige.
-  if (!rolLoading && rol) return <Navigate to={rutaPorRol(rol)} replace />
+  if (!rolLoading && rol) return <Navigate to={rutaPorRol(rol, estadoOperador)} replace />
   // Si no sabemos el rol, no ofrecemos elegir (podría ya tener uno).
   if (rolError) return <PantallaError mensaje={rolError} onReintentar={recargarRol} />
 
@@ -93,6 +93,9 @@ export default function SeleccionarRol() {
           <h2 className="mt-4 text-[20px] font-bold text-[#0F172A] dark:text-white">Soy Operador</h2>
           <p className="mt-2 text-[14px] leading-relaxed text-[#64748B] dark:text-slate-400 flex-1">
             Gestiona alertas activas, acompaña a los usuarios y coordina la respuesta.
+          </p>
+          <p className="mt-3 text-[12px] font-medium text-[#B45309] dark:text-amber-400">
+            Requiere aprobación del equipo de CuidaChile antes de acceder al panel.
           </p>
           <button
             type="button"

@@ -10,6 +10,7 @@ import SeleccionarRol from './pages/SeleccionarRol'
 import AuthCallback from './pages/AuthCallback'
 import Usuario from './pages/Usuario'
 import OperadorDashboard from './pages/OperadorDashboard'
+import OperadorPendiente from './pages/OperadorPendiente'
 
 function App() {
   return (
@@ -44,7 +45,8 @@ function App() {
               </Protected>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/operador/pendiente" element={<Protected><OperadorPendiente /></Protected>} />
+          <Route path="*"element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

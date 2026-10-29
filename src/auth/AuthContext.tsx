@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { esRolValido, type Rol } from '../lib/roles'
+import { esEstadoOperadorValido, esRolValido, type EstadoOperador, type Rol } from '../lib/roles'
 
 interface SignUpResult {
   error: string | null
@@ -12,6 +12,7 @@ interface SignUpResult {
 interface EstadoRol {
   userId: string
   rol: Rol | null
+  estadoOperador: EstadoOperador | null
   error: string | null
 }
 
@@ -21,6 +22,8 @@ interface AuthContextValue {
   loading: boolean
   /** Rol definitivo desde perfil.rol. null = aún no lo elige. */
   rol: Rol | null
+  /** Solo operadores: 'aprobado' abre el panel; lo asigna un admin. */
+  estadoOperador: EstadoOperador | null
   /** true mientras se consulta el rol del usuario actual. */
   rolLoading: boolean
   rolError: string | null
@@ -68,7 +71,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
     let activo = true
     supabase
       .from('perfil')
-      .select('rol')
+      .select('rol, operador_estado')
       .eq('id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -76,6 +79,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setEstadoRol({
           userId,
           rol: esRolValido(data?.rol) ? data.rol : null,
+          estadoOperador: esEstadoOperadorValido(data?.operador_estado) ? data.operador_estado : null,
           error: error ? 'No pudimos cargar tu perfil. Revisa tu conexión e intenta de nuevo.' : null,
         })
       })
@@ -98,7 +102,14 @@ function AuthProvider({ children }: { children: ReactNode }) {
       if (error.hint === 'rol_ya_asignado') recargarRol()
       return error.message
     }
-    setEstadoRol({ userId, rol: esRolValido(data) ? data : nuevo, error: null })
+    const rolAsignado = esRolValido(data) ? data : nuevo
+    setEstadoRol({
+      userId,
+      rol: rolAsignado,
+      // asignar_rol() deja a todo operador nuevo en revisión.
+      estadoOperador: rolAsignado === 'operador' ? 'pendiente' : null,
+      error: null,
+    })
     return null
   }
 
@@ -131,6 +142,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         session, user, loading,
         rol: vigente?.rol ?? null,
+        estadoOperador: vigente?.estadoOperador ?? null,
         rolLoading,
         rolError: vigente?.error ?? null,
         recargarRol, asignarRol,

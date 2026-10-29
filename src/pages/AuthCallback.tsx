@@ -10,10 +10,11 @@ import { PantallaCarga, PantallaError } from '../components/EstadoPantalla'
  * del correo de confirmación y el botón "Ir a mi panel". supabase-js
  * procesa los tokens de la URL al iniciar (detectSessionInUrl); esta página
  * solo espera la sesión + el rol y redirige:
- *   operador → /operador/dashboard · usuario → /usuario · sin rol → /seleccionar-rol
+ *   operador aprobado → /operador/dashboard · operador en revisión → /operador/pendiente
+ *   usuario → /usuario · sin rol → /seleccionar-rol
  */
 export default function AuthCallback() {
-  const { session, loading, rolLoading, rol, rolError, recargarRol } = useAuth()
+  const { session, loading, rolLoading, rol, estadoOperador, rolError, recargarRol } = useAuth()
 
   // Google devuelve ?error=…&error_description=… (o en el hash) si el usuario cancela.
   const params = new URLSearchParams(window.location.search || window.location.hash.slice(1))
@@ -25,5 +26,5 @@ export default function AuthCallback() {
     return <Navigate to="/login" replace />
   }
   if (rolError) return <PantallaError mensaje={rolError} onReintentar={recargarRol} />
-  return <Navigate to={rutaPorRol(rol)} replace />
+  return <Navigate to={rutaPorRol(rol, estadoOperador)} replace />
 }
