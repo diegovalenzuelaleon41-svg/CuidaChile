@@ -19,8 +19,7 @@ export default function BottomNav({ tab, onTab }: Props) {
   return (
     <nav
       aria-label="Navegación principal"
-      className="shrink-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-line dark:border-slate-700"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="shrink-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-line dark:border-slate-700 pb-[env(safe-area-inset-bottom)]"
     >
       <div className="grid grid-cols-4">
         {TABS.map((t) => {

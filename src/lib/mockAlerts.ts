@@ -5,7 +5,17 @@
 
 export type AlertaTipo = 'SOS' | 'BARRIAL' | 'ACOMPANAMIENTO'
 
-export type AlertaEstado = 'PENDIENTE' | 'EN_PROCESO' | 'RESUELTA'
+/** Colores neón por tipo: contrastan con el fondo casi negro del mapa dark-matter. */
+export const COLOR_NEON: Record<AlertaTipo, string> = {
+  SOS: '#EF4444',
+  BARRIAL: '#F59E0B',
+  ACOMPANAMIENTO: '#3B82F6',
+}
+
+export type AlertaEstado = 'PENDIENTE' | 'EN_PROCESO' | 'RESUELTA' | 'DESCARTADA'
+
+/** Motivos para descartar una alerta (quedan en la bitácora). */
+export const MOTIVOS_DESCARTE = ['Falsa alarma', 'Duplicada', 'Fuera de zona', 'Otro'] as const
 
 export interface Alerta {
   id: string
@@ -19,6 +29,15 @@ export interface Alerta {
   descripcion?: string
   /** Solo ACOMPANAMIENTO: ruta del ciudadano. */
   ruta?: string
+  /** Acompañamiento real aún sin GPS: lat/lng son un valor por defecto y no se dibuja pin. */
+  sinUbicacion?: boolean
+  /** Última actualización (ISO) — acompañamientos reales. */
+  actualizadoEn?: string
+  /** Acompañamientos reales: cuándo se solicitó y cuándo se aceptó (ISO). */
+  creadoEn?: string
+  aceptadoEn?: string
+  /** Acompañamientos reales: extremos de la ruta, [lng, lat]. */
+  rutaCoords?: { origen: [number, number]; destino: [number, number] }
   estado: AlertaEstado
   /** Entradas de la bitácora (timeline) asociadas a esta alerta. */
   timeline: string[]
