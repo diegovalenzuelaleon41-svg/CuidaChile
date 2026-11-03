@@ -1,50 +1,62 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, Fingerprint, ShieldCheck, ArrowRight, AlertCircle, Loader2, Sun, Moon } from 'lucide-react'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
-import { useTheme } from '../hooks/useTheme'
 import Logo from '../components/Logo'
 
 export default function Login() {
   const { session, signIn } = useAuth()
-  const { esOscuro, toggleTheme } = useTheme()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // AuthCallback reenvía aquí el error si el usuario canceló en Google.
+  const [error, setError] = useState<string | null>(
+    (location.state as { error?: string } | null)?.error ?? null
+  )
   const [busy, setBusy] = useState(false)
-  const [bioBusy, setBioBusy] = useState(false)
-  const [bioError, setBioError] = useState(false)
 
-  if (session) return <Navigate to="/seleccionar-rol" replace />
+  // Ya autenticado: /auth/callback consulta perfil.rol y redirige a su panel.
+  if (session) return <Navigate to="/auth/callback" replace />
 
-  async function onSubmit(e: FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     const err = await signIn(email.trim(), password)
     setBusy(false)
     if (err) setError(err)
-    else navigate('/seleccionar-rol', { replace: true })
+    else navigate('/auth/callback', { replace: true })
   }
 
-  async function onBiometric() {
-    setBioBusy(true)
-    setBioError(false)
-    await new Promise((r) => setTimeout(r, 1500))
-    setBioBusy(false)
-    setBioError(true)
+  async function handleGoogleLogin() {
+    setError(null)
+    // Supabase redirige a Google y vuelve a /auth/callback, que resuelve el rol.
+    // Esa URL debe estar en Authentication → URL Configuration → Redirect URLs.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) {
+      console.error(error)
+      setError('No se pudo iniciar sesión con Google. Intenta de nuevo.')
+    }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-5 bg-[radial-gradient(ellipse_at_top,#EFF6FF_0%,#FFFFFF_60%)] dark:bg-none dark:bg-slate-950">
+    <main className="relative min-h-screen flex items-center justify-center px-5 pt-16 pb-5 md:p-5 bg-[radial-gradient(ellipse_at_top,#EFF6FF_0%,#FFFFFF_60%)] dark:bg-none dark:bg-slate-950">
+      <Link to="/"
+        className="absolute top-4 left-4 md:top-6 md:left-6 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-[14px] font-medium text-gray-500 hover:text-blue-600 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:text-slate-400 dark:hover:text-[#93C5FD] group">
+        <ArrowLeft size={18} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
+        <span>Volver al inicio</span>
+      </Link>
+
       <div className="w-full max-w-[420px]">
         <div className="card p-8 md:p-12 relative">
-          <button type="button" onClick={toggleTheme} aria-label={esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} title={esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center hover:bg-canvas dark:hover:bg-slate-800 text-[#64748B] dark:text-slate-400">
-            {esOscuro ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
           <div className="flex flex-col items-center mb-8">
             <Logo size={64} />
             <p className="mt-3 text-[14px] text-[#64748B] dark:text-slate-400 text-center">
@@ -52,7 +64,7 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+          <form onSubmit={handleLogin} className="flex flex-col gap-5" noValidate>
             <div>
               <label htmlFor="email" className="label-cuida mb-2">Correo Electrónico</label>
               <div className="relative">
@@ -94,13 +106,18 @@ export default function Login() {
             <div className="flex-1 h-px bg-[#E2E8F0] dark:bg-slate-700" />
           </div>
 
-          <div className="flex flex-col items-center gap-2">
-            <button type="button" onClick={onBiometric} disabled={bioBusy}
-              aria-label="Iniciar sesión con huella dactilar"
-              className="w-14 h-14 rounded-full border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-[#2563EB] hover:bg-[#EFF6FF] dark:hover:bg-slate-700 hover:scale-105 transition-all disabled:opacity-60">
-              {bioBusy ? <Loader2 size={24} className="animate-spin" /> : <Fingerprint size={28} strokeWidth={1.5} />}
+          <div className="w-full flex flex-col items-center gap-2">
+            <button type="button" onClick={handleGoogleLogin}
+              aria-label="Iniciar sesión con Google"
+              className="group relative w-full flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-[14px] sm:text-[15px] font-medium text-gray-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400/60 dark:focus-visible:ring-offset-slate-900">
+              <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden className="absolute left-4 sm:left-5">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+              </svg>
+              <span>Continuar con Google</span>
             </button>
-            {bioError && <p className="text-[12px] text-[#DC2626]">No se pudo verificar la huella</p>}
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-2 text-[#94A3B8] dark:text-slate-500">

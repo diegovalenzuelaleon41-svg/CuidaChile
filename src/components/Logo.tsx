@@ -1,11 +1,12 @@
 import { Shield } from 'lucide-react'
 
 /** Isotipo spec §1: escudo con persona, + texto CuidaChile */
-export default function Logo({ size = 40 }: { size?: number }) {
+/** textoClaro: para fondos oscuros fijos (no dependen del modo oscuro), p. ej. el panel del operador. */
+export default function Logo({ size = 40, textoClaro = false }: { size?: number; textoClaro?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
+    <span className="inline-flex shrink-0 items-center gap-2.5">
       <span
-        className="relative inline-flex items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] text-white shadow-[0_8px_24px_rgba(37,99,235,0.25)]"
+        className="relative inline-flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] text-white shadow-[0_8px_24px_rgba(37,99,235,0.25)]"
         style={{ width: size, height: size }}
         aria-hidden
       >
@@ -19,7 +20,7 @@ export default function Logo({ size = 40 }: { size?: number }) {
           style={{ width: size * 0.3, height: size * 0.16, bottom: size * 0.22 }}
         />
       </span>
-      <span className="text-[20px] font-bold tracking-tight text-[#1E293B] dark:text-white">
+      <span className={`whitespace-nowrap text-[20px] font-bold tracking-tight ${textoClaro ? 'text-white' : 'text-[#1E293B] dark:text-white'}`}>
         CuidaChile
       </span>
     </span>

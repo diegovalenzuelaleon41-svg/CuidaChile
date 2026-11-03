@@ -3,6 +3,7 @@ import { ArrowRight, Route, Siren, Users, ShieldCheck } from 'lucide-react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import FloatingPhoneMockup from '../components/FloatingPhoneMockup'
+import HeroBackdrop from '../components/HeroBackdrop'
 
 const FEATURES = [
   {
@@ -28,25 +29,33 @@ export default function Landing() {
       <Header />
       <main className="pt-[68px]">
         {/* Hero */}
-        <section id="inicio" className="relative overflow-hidden bg-[radial-gradient(ellipse_at_top,#EFF6FF_0%,#FFFFFF_55%,#F8FAFC_100%)] dark:bg-none dark:bg-slate-950">
-          <div className="mx-auto max-w-7xl grid md:grid-cols-2 gap-12 items-center px-5 md:px-8 py-12 md:py-16">
+        <section id="inicio" className="relative isolate overflow-hidden bg-white dark:bg-slate-950">
+          <HeroBackdrop />
+          <div className="relative mx-auto max-w-7xl grid md:grid-cols-2 gap-12 items-center px-5 md:px-8 py-12 md:py-16">
             <div>
-              <span className="inline-block rounded-full bg-[#EFF6FF] dark:bg-slate-800 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2563EB] dark:text-[#93C5FD]">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#BFDBFE] bg-[#EFF6FF] dark:border-slate-700 dark:bg-slate-800 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2563EB] dark:text-[#93C5FD]">
+                <ShieldCheck size={14} strokeWidth={2.25} />
                 Seguridad que te acompaña
               </span>
-              <h1 className="mt-5 text-[44px] md:text-[60px] font-bold leading-[1.1] tracking-tight text-[#0F172A] dark:text-white">
+              <h1 className="mt-5 text-[44px] md:text-[60px] font-extrabold leading-[1.05] tracking-tight text-[#0B1E4A] dark:text-white">
                 Tu seguridad,
                 <br />
-                siempre contigo.
+                <span className="text-[#2563EB] dark:text-[#60A5FA]">siempre contigo.</span>
               </h1>
               <p className="mt-5 text-[18px] leading-relaxed text-[#64748B] dark:text-slate-400 max-w-[520px]">
                 CuidaChile te ayuda a actuar rápidamente ante situaciones de riesgo, compartir tu ubicación y mantenerte conectado con personas de confianza.
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
-                <Link to="/registro" className="btn-primary px-7 py-3.5 text-[15px]">
-                  Comenzar ahora <ArrowRight size={18} />
+                <Link
+                  to="/registro"
+                  className="group inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#0B1E4A] px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(11,30,74,0.30)] transition-all duration-200 hover:bg-[#132B66] hover:scale-[1.02] active:scale-[0.98] dark:bg-[#2563EB] dark:hover:bg-[#1D4ED8]"
+                >
+                  Comenzar ahora <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
-                <Link to="/login" className="btn-secondary px-7 py-3.5 text-[15px]">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center justify-center gap-2 rounded-[10px] border-2 border-[#0B1E4A]/15 bg-white/70 backdrop-blur px-7 py-3.5 text-[15px] font-semibold text-[#0B1E4A] transition-all duration-200 hover:border-[#2563EB] hover:text-[#2563EB] hover:scale-[1.02] dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+                >
                   Ya tengo una cuenta
                 </Link>
               </div>

@@ -16,24 +16,19 @@ import { supabase } from '../lib/supabase'
 import { buscarDirecciones, direccionDesdeCoords, type ResultadoGeo } from '../lib/geocoding'
 import { obtenerRutaCalles } from '../lib/rutaOSRM'
 import Supercluster from 'supercluster'
-import {
-  FOTO_OPERADOR, MENSAJE_BIENVENIDA_OPERADOR, MENSAJE_FIN_RUTA_OPERADOR,
-  OPERADOR_NOMBRE, detectarPeligro,
-} from '../lib/operador'
-// Burbuja amable cuando la IA no responde (alta demanda, sin conexión, timeout).
-const MENSAJE_FALLO_IA = '⚠️ Hubo un problema de conexión. Por favor, intenta de nuevo.'
-// Mensaje de cuota: lo devuelve la Edge Function (429) y se muestra tal cual
-// en la burbuja (ver extraerMensajeCuota). Fuente única: el servidor.
-// Freno local: 1 mensaje cada 5 s para no saturar el RPM del nivel gratuito.
-const UMBRAL_ENVIO_MS = 5000
 import { useSeguridad, type Contacto } from '../store/usoSeguridad'
 import DashboardHeader from '../components/usuario/DashboardHeader'
 import MapaSeguro, { type GpsEstado, type MapEstado } from '../components/usuario/MapaSeguro'
+import { useSearchParams } from 'react-router-dom'
 import BottomNav, { type TabId } from '../components/usuario/BottomNav'
 import StatsRuta from '../components/usuario/StatsRuta'
 import CirculoLista from '../components/usuario/CirculoLista'
 import HistorialLista from '../components/usuario/HistorialLista'
-import ChatOperador from '../components/usuario/ChatOperador'
+import ChatConOperador from '../components/usuario/ChatConOperador'
+import { useChatAcompanamiento } from '../hooks/useChatAcompanamiento'
+import BuscandoOperador from '../components/usuario/BuscandoOperador'
+import { useAcompanamiento } from '../hooks/useAcompanamiento'
+import type { Acompanamiento } from '../lib/acompanamientos'
 import { ModalRuta, ModalContacto, ModalSOS, ModalReporte, type FormContacto, type FormReporte } from '../components/usuario/Modales'
 
 // Reporte comunitario: pin visible 6 h; a las 2 h se atenúa a amarillo.
@@ -109,12 +104,17 @@ const SANTIAGO: [number, number] = [-70.6693, -33.4489]
 const MAP_STYLE_CLARO = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 const MAP_STYLE_OSCURO = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 const MAP_STYLE_FALLBACK = 'https://tiles.openfreemap.org/styles/liberty'
-// Máximo a esperar por la IA (Edge Function + Gemini) antes de responder
-// con las reglas locales. 60 s: la función reintenta hasta 3 veces por modelo
-// (backoff 1 s + 2 s) y puede probar el modelo de respaldo, así que con 20 s
-// el timeout ganaba la carrera y se mostraban las reglas aunque Gemini
-// respondiera bien después. Configurable para la demo.
-const TIEMPO_MAX_IA_MS = 60000
+
+/** Ruta a la espera de operador; se activa en el mapa cuando el acompañamiento pasa a EN_CURSO. */
+interface RutaPendiente {
+  id: string
+  origen: string
+  destino: string
+  origenLng: number | null
+  origenLat: number | null
+  destinoLat: number | null
+  destinoLng: number | null
+}
 
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -150,20 +150,14 @@ export default function Usuario() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esOscuro])
   const {
-    rutaActiva, alertaActiva, contactos, historial, mensajes,
-    sesionFinalizada,
-    iniciarRuta, finalizarRuta, setAlerta, setContactos, setHistorial, pushMensaje,
-    revisarExpiracion,
+    rutaActiva, alertaActiva, contactos, historial,
+    iniciarRuta, finalizarRuta, setAlerta, setContactos, setHistorial,
   } = useSeguridad()
 
-  // Al abrir: si la última sesión expiró (>12 h sin actividad), se marca finalizada.
-  useEffect(() => {
-    revisarExpiracion()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const [nombre, setNombre] = useState<string>(user?.email ?? 'Usuario')
-  const [tab, setTab] = useState<TabId>('inicio')
+  // ?tab=perfil permite abrir una pestaña directo (p. ej. desde el menú del header).
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<TabId>(() => (searchParams.get('tab') === 'perfil' ? 'perfil' : 'inicio'))
   const [pos, setPos] = useState<[number, number]>(SANTIAGO)
   const [mapEstado, setMapEstado] = useState<MapEstado>('cargando')
   const [gpsEstado, setGpsEstado] = useState<GpsEstado>('pendiente')
@@ -201,7 +195,6 @@ export default function Usuario() {
   const popupRef = useRef<maplibregl.Popup | null>(null)
   const markerElsRef = useRef(new Map<string, HTMLElement>())
   const [showChat, setShowChat] = useState(false)
-  const [operadorEscribiendo, setOperadorEscribiendo] = useState(false)
   const [showSosModal, setShowSosModal] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -224,8 +217,6 @@ export default function Usuario() {
   const abortRef = useRef<AbortController | null>(null)
   const debounceOrigenRef = useRef<number | null>(null)
   const abortOrigenRef = useRef<AbortController | null>(null)
-  // Throttle del chat: marca del último envío aceptado (1 cada 5 s).
-  const ultimoEnvioRef = useRef<number>(0)
   // Para volar la cámara a tu posición real solo con el primer fix GPS.
   const fijadoInicial = useRef(false)
   // Flag fresco del modo pin-central (el mapa vive fuera de React)
@@ -237,6 +228,35 @@ export default function Usuario() {
   // Estado fresco para handlers del mapa (se crea una sola vez)
   const estadoRef = useRef({ pos, tab, hayRuta: !!rutaActiva })
   estadoRef.current = { pos, tab, hayRuta: !!rutaActiva }
+
+  // Acompañamiento en vivo con un operador (Realtime). Al operador solo se
+  // le envía GPS real: con el fallback de Santiago no se manda nada.
+  const gpsRealRef = useRef<[number, number] | null>(null)
+  gpsRealRef.current = gpsEstado === 'ok' ? pos : null
+  const {
+    acomp,
+    solicitar: solicitarAcomp,
+    cancelar: cancelarAcomp,
+    finalizar: finalizarAcomp,
+    limpiar: limpiarAcomp,
+  } = useAcompanamiento(user?.id, () => gpsRealRef.current)
+  const [cancelandoAcomp, setCancelandoAcomp] = useState(false)
+  // Chat real con el operador de la central (tabla mensajes + Realtime).
+  const chat = useChatAcompanamiento(acomp?.id ?? null, 'usuario')
+  // Mensajes del operador ya vistos (se marca al abrir/cerrar el chat).
+  const [vistosOperador, setVistosOperador] = useState<{ acompId: string | null; n: number }>({ acompId: null, n: 0 })
+  const mensajesOperador = chat.mensajes.filter((m) => m.emisor_rol === 'operador').length
+  const noLeidos =
+    showChat || !acomp ? 0 : mensajesOperador - (vistosOperador.acompId === acomp.id ? vistosOperador.n : 0)
+  function abrirChat(abrir: boolean) {
+    setShowChat(abrir)
+    setVistosOperador({ acompId: acomp?.id ?? null, n: mensajesOperador })
+  }
+  // Datos de la ruta recién solicitada (coords exactas) hasta que un operador la acepta.
+  const rutaPendienteRef = useRef<RutaPendiente | null>(null)
+  // Acompañamiento visto en PENDIENTE en esta pestaña: al conectarse, el operador saluda.
+  // (Si se retoma uno ya EN_CURSO tras recargar, no se repite el saludo.)
+  const pendienteVistoRef = useRef<string | null>(null)
 
   const protegido = !alertaActiva
 
@@ -427,23 +447,8 @@ export default function Usuario() {
           attributionControl: false,
         })
         map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
-        try {
-          map.addControl(
-            new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }),
-            'bottom-right',
-          )
-        } catch { /* control opcional */ }
-        try {
-          map.addControl(
-            new maplibregl.GeolocateControl({
-              positionOptions: { enableHighAccuracy: true },
-              trackUserLocation: true,
-              showAccuracyCircle: true,
-              showUserLocation: false, // usamos pin "Tú" propio
-            }),
-            'bottom-right',
-          )
-        } catch { /* control opcional */ }
+        // Zoom y "centrar" son botones propios (columna derecha); los controles
+        // nativos de MapLibre los duplicaban y quedaban bajo la tarjeta inferior.
         mapObj.current = map
         // Pin de ubicación con pulso azul + etiqueta "Tú"
         const wrap = document.createElement('div')
@@ -1307,6 +1312,10 @@ export default function Usuario() {
     origenCoordsOverride?: { lat: number; lng: number } | null,
   ) {
     if (!user) return
+    if (acomp) {
+      setAviso('Ya tienes una ruta segura en curso.')
+      return
+    }
     const inicioIso = new Date().toISOString()
     // Origen: manual exacto si el usuario lo escribió/eligió, si no GPS actual.
     const oLng = origenCoordsOverride?.lng ?? pos[0]
@@ -1321,6 +1330,7 @@ export default function Usuario() {
       setDirActual(origenTxt)
     }
     let id = uid()
+    let rutaGuardada = false
     try {
       const { data, error } = await supabase.from('rutas').insert({
         usuario_id: user.id,
@@ -1333,17 +1343,89 @@ export default function Usuario() {
         inicio: inicioIso,
         estado: 'activa',
       }).select('id').maybeSingle()
-      if (!error && data?.id) id = data.id
+      if (!error && data?.id) {
+        id = data.id
+        rutaGuardada = true
+      }
     } catch { /* tolerante */ }
-    iniciarRuta({ id, origen: origenTxt, destino: destinoTxt, inicioEpoch: Date.now(), destinoLat: destCoords?.lat, destinoLng: destCoords?.lng })
+
+    // La ruta queda en espera ("Buscando operador…") hasta que un operador
+    // acepta el acompañamiento; recién ahí se activa en el mapa.
+    rutaPendienteRef.current = {
+      id,
+      origen: origenTxt,
+      destino: destinoTxt,
+      origenLng: oLng,
+      origenLat: oLat,
+      destinoLat: destCoords?.lat ?? null,
+      destinoLng: destCoords?.lng ?? null,
+    }
+    const gps = gpsRealRef.current
+    const error = await solicitarAcomp({
+      origen: origenTxt,
+      destino: destinoTxt,
+      rutaId: rutaGuardada ? id : null,
+      lat: gps ? gps[1] : null,
+      lng: gps ? gps[0] : null,
+      origenLat: oLat,
+      origenLng: oLng,
+      destinoLat: destCoords?.lat ?? null,
+      destinoLng: destCoords?.lng ?? null,
+    })
+    if (error) {
+      rutaPendienteRef.current = null
+      if (rutaGuardada) {
+        void supabase.from('rutas').update({ fin: new Date().toISOString(), estado: 'cancelada' }).eq('id', id)
+      }
+      setAviso(error)
+    }
+  }
+
+  /** Datos de la ruta de un acompañamiento retomado (p. ej. tras recargar la página). */
+  async function rutaDesdeAcompanamiento(a: Acompanamiento): Promise<RutaPendiente> {
+    const base: RutaPendiente = {
+      id: a.ruta_id ?? a.id,
+      origen: a.origen,
+      destino: a.destino,
+      origenLng: a.lng_actual,
+      origenLat: a.lat_actual,
+      destinoLat: null,
+      destinoLng: null,
+    }
+    if (!a.ruta_id) return base
+    const { data } = await supabase
+      .from('rutas')
+      .select('origen_lat, origen_lng, destino_lat, destino_lng')
+      .eq('id', a.ruta_id)
+      .maybeSingle()
+    if (!data) return base
+    return {
+      ...base,
+      origenLat: data.origen_lat ?? base.origenLat,
+      origenLng: data.origen_lng ?? base.origenLng,
+      destinoLat: data.destino_lat,
+      destinoLng: data.destino_lng,
+    }
+  }
+
+  /** Un operador aceptó: la ruta se activa en el mapa y (si es una conexión nueva) el operador saluda. */
+  function conectarRuta(r: RutaPendiente, saludar: boolean) {
+    iniciarRuta({
+      id: r.id,
+      origen: r.origen,
+      destino: r.destino,
+      inicioEpoch: Date.now(),
+      destinoLat: r.destinoLat ?? undefined,
+      destinoLng: r.destinoLng ?? undefined,
+    })
     // Ruta real por calles (no bloquea la activación)
-    if (destCoords) {
-      const o: [number, number] = [oLng, oLat]
-      const d: [number, number] = [destCoords.lng, destCoords.lat]
-      obtenerRutaCalles(o, d).then((r) => {
-        if (r) {
-          setLineaRuta(r.coords)
-          setInfoRuta({ distanciaM: r.distanciaM, duracionS: r.duracionS })
+    if (r.destinoLat != null && r.destinoLng != null && r.origenLat != null && r.origenLng != null) {
+      const o: [number, number] = [r.origenLng, r.origenLat]
+      const d: [number, number] = [r.destinoLng, r.destinoLat]
+      obtenerRutaCalles(o, d).then((ruta) => {
+        if (ruta) {
+          setLineaRuta(ruta.coords)
+          setInfoRuta({ distanciaM: ruta.distanciaM, duracionS: ruta.duracionS })
         } else {
           setLineaRuta([o, d])
           setInfoRuta(null)
@@ -1353,11 +1435,58 @@ export default function Usuario() {
       setLineaRuta(null)
       setInfoRuta(null)
     }
-    // El operador saluda y su chat se abre automáticamente con la ruta.
-    console.log('🟢 Ruta activada')
-    pushMensaje({ id: uid(), emisor: 'operador', contenido: MENSAJE_BIENVENIDA_OPERADOR, creado_en: new Date().toISOString() })
-    setShowChat(true)
-    setAviso('Ruta segura activada. Tu círculo fue notificado.')
+    if (saludar) setAviso('Operador conectado. Tu ruta está siendo monitoreada.')
+  }
+
+  // Reacciona a los cambios del acompañamiento que llegan por Realtime.
+  useEffect(() => {
+    if (!acomp) return
+    if (acomp.estado === 'PENDIENTE') {
+      pendienteVistoRef.current = acomp.id
+      return
+    }
+    if (acomp.estado === 'EN_CURSO') {
+      if (useSeguridad.getState().rutaActiva) return
+      const saludar = pendienteVistoRef.current === acomp.id
+      const pendiente = rutaPendienteRef.current
+      rutaPendienteRef.current = null
+      if (pendiente) conectarRuta(pendiente, saludar)
+      else void rutaDesdeAcompanamiento(acomp).then((r) => conectarRuta(r, saludar))
+      return
+    }
+    // FINALIZADO por el operador (el usuario limpia el suyo antes de enviarlo),
+    // DESCARTADA por la central, o CANCELADO.
+    limpiarAcomp()
+    rutaPendienteRef.current = null
+    const enRuta = !!useSeguridad.getState().rutaActiva
+    if (acomp.estado === 'FINALIZADO' && enRuta) {
+      void cerrarRuta('Tu operador finalizó el acompañamiento. ¡Llegaste bien!')
+    } else if (acomp.estado === 'DESCARTADA') {
+      if (enRuta) {
+        void cerrarRuta('La central cerró tu acompañamiento.')
+      } else {
+        if (acomp.ruta_id) {
+          void supabase.from('rutas').update({ fin: new Date().toISOString(), estado: 'cancelada' }).eq('id', acomp.ruta_id)
+        }
+        setAviso('La central no pudo tomar tu solicitud. Intenta de nuevo o usa el SOS si es urgente.')
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acomp?.id, acomp?.estado])
+
+  async function cancelarSolicitud() {
+    if (!acomp || acomp.estado !== 'PENDIENTE') return
+    const rutaId = acomp.ruta_id
+    setCancelandoAcomp(true)
+    const cancelada = await cancelarAcomp()
+    setCancelandoAcomp(false)
+    // false: un operador la aceptó justo antes; el efecto de arriba la conecta.
+    if (!cancelada) return
+    rutaPendienteRef.current = null
+    if (rutaId) {
+      void supabase.from('rutas').update({ fin: new Date().toISOString(), estado: 'cancelada' }).eq('id', rutaId)
+    }
+    setAviso('Solicitud cancelada.')
   }
 
   async function confirmarRuta() {
@@ -1379,6 +1508,13 @@ export default function Usuario() {
 
   async function terminarRuta() {
     if (!rutaActiva || !user) return
+    void finalizarAcomp()
+    await cerrarRuta('Ruta finalizada. ¡Bien hecho!')
+  }
+
+  /** Cierre local de la ruta (la termine el usuario o su operador). */
+  async function cerrarRuta(avisoTxt: string) {
+    if (!rutaActiva || !user) return
     try {
       await supabase.from('rutas').update({ fin: new Date().toISOString(), estado: 'completada' }).eq('id', rutaActiva.id)
     } catch { /* tolerante */ }
@@ -1393,14 +1529,11 @@ export default function Usuario() {
       },
       ...historial,
     ])
-    // La despedida pertenece a la sesión que se cierra: se guarda antes de
-    // finalizar para que quede en el historial de esa sesión.
-    pushMensaje({ id: uid(), emisor: 'operador', contenido: MENSAJE_FIN_RUTA_OPERADOR, creado_en: new Date().toISOString() })
     finalizarRuta()
     setLineaRuta(null)
     setInfoRuta(null)
-    setOperadorEscribiendo(false)
-    setAviso('Ruta finalizada. ¡Bien hecho!')
+    setShowChat(false)
+    setAviso(avisoTxt)
   }
 
   async function agregarContacto() {
@@ -1443,117 +1576,6 @@ export default function Usuario() {
       navigator.clipboard?.writeText(texto).catch(() => {})
       setAviso('Ubicación copiada al portapapeles.')
     }
-  }
-
-  function enviarChat(texto: string) {
-    // Sesión finalizada: no se aceptan mensajes (el input ya viene bloqueado).
-    if (useSeguridad.getState().sesionFinalizada) {
-      setAviso('Tu ruta anterior finalizó. Inicia una nueva ruta para chatear.')
-      return
-    }
-    // Throttle: 1 mensaje cada 5 s para cuidar el RPM gratuito.
-    const ahoraEnvio = Date.now()
-    if (ahoraEnvio - ultimoEnvioRef.current < UMBRAL_ENVIO_MS) {
-      setAviso('Espera unos segundos antes de enviar otro mensaje.')
-      return
-    }
-    ultimoEnvioRef.current = ahoraEnvio
-    // Historial previo (sin el mensaje actual) como contexto para la IA.
-    const previos = useSeguridad.getState().mensajes
-      .slice(-10)
-      .map((m) => ({ emisor: m.emisor, contenido: m.contenido }))
-    pushMensaje({ id: uid(), emisor: 'usuario', contenido: texto, creado_en: new Date().toISOString() })
-    // El operador responde solo durante una ruta activa sin alerta SOS.
-    const { rutaActiva: hayRuta, alertaActiva: hayAlerta } = useSeguridad.getState()
-    if (!hayRuta || hayAlerta) return
-    console.log('💬 mensaje al operador…')
-    setOperadorEscribiendo(true)
-    // Solo gana la primera respuesta (IA o aviso): evita duplicados si la IA llega tarde.
-    let resuelto = false
-    const responder = (textoResp: string, sugiereSOS: boolean, fuente: 'gemini' | 'reglas' | 'sistema') => {
-      if (resuelto) return
-      resuelto = true
-      setOperadorEscribiendo(false)
-      const estado = useSeguridad.getState()
-      if (!estado.rutaActiva || estado.alertaActiva) return
-      console.log(`👤 ${OPERADOR_NOMBRE} responde (${fuente})${sugiereSOS ? ' (sugiere SOS)' : ''}`)
-      estado.pushMensaje({
-        id: uid(),
-        emisor: 'operador',
-        contenido: textoResp,
-        creado_en: new Date().toISOString(),
-        accion: sugiereSOS ? 'sugerirSOS' : undefined,
-      })
-    }
-    // Fallo de la IA (alta demanda, timeout, sin red): burbuja amable en el
-    // chat en vez de romper la app. Si el mensaje olía a peligro, se adjunta
-    // igual el botón directo al SOS.
-    const avisarFallo = (motivo: string) => {
-      console.warn(`⚠️ IA no disponible (${motivo}), mostrando aviso en el chat`)
-      responder(MENSAJE_FALLO_IA, detectarPeligro(texto), 'sistema')
-    }
-    // La Edge Function devuelve el mensaje de descanso (429/cuota) en el body
-    // del error; supabase-js lo expone como error.context (Response u objeto).
-    // Se extrae para mostrarlo tal cual en vez del genérico de conexión.
-    const extraerMensajeCuota = async (error: unknown): Promise<string | null> => {
-      try {
-        const ctx = (error as { context?: unknown })?.context
-        let body: unknown = null
-        if (ctx instanceof Response) {
-          body = await ctx.clone().json().catch(() => null)
-        } else if (typeof ctx === 'object' && ctx !== null) {
-          body = ctx
-        } else if (typeof ctx === 'string') {
-          try {
-            body = JSON.parse(ctx)
-          } catch {
-            body = null
-          }
-        }
-        const msg = (body as { error?: unknown } | null)?.error
-        if (typeof msg === 'string' && /tomando un descanso|limite de mensajes/i.test(msg.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) {
-          return msg
-        }
-      } catch {
-        /* noop */
-      }
-      return null
-    }
-    // Límite: si la IA tarda demasiado, se avisa en el chat.
-    const esperaMax = window.setTimeout(() => avisarFallo('timeout 60s'), TIEMPO_MAX_IA_MS)
-    // supabase.functions.invoke envía solo el body (mensaje + historial + ubicación);
-    // los headers (Content-Type: application/json, apikey, Authorization)
-    // los pone automáticamente el cliente de Supabase. No hardcodear la key aquí.
-    // La ubicación permite a Cristián mencionar reportes cercanos (chat-operador).
-    const posChat = estadoRef.current.pos
-    supabase.functions.invoke<{ texto?: string; error?: string }>('chat-operador', {
-      body: {
-        mensaje: texto,
-        historial: previos,
-        ubicacion: { lat: posChat[1], lng: posChat[0] },
-      },
-    })
-      .then(async ({ data, error }) => {
-        window.clearTimeout(esperaMax)
-        // Éxito: burbuja con el texto de Gemini.
-        if (!error && data?.texto?.trim()) {
-          responder(data.texto.trim(), detectarPeligro(texto), 'gemini')
-          return
-        }
-        // Estado != 200: si es 429/cuota, burbuja exacta de descanso;
-        // si no, aviso genérico de conexión. Nada rompe el chat.
-        const msgCuota = error ? await extraerMensajeCuota(error) : null
-        if (msgCuota) {
-          console.warn('⚠️ Cuota de IA agotada, mostrando mensaje de descanso')
-          responder(msgCuota, detectarPeligro(texto), 'sistema')
-          return
-        }
-        avisarFallo(error?.message ?? data?.error ?? 'sin texto')
-      })
-      .catch((e) => {
-        window.clearTimeout(esperaMax)
-        avisarFallo(e instanceof Error ? e.message : 'red')
-      })
   }
 
   // ── Ubicación exacta: autocompletado de destino ────────────────────────
@@ -1686,6 +1708,8 @@ export default function Usuario() {
   const mapaListo = mapEstado === 'listo' && !!mapObj.current
   // Cualquier chip GPS visible desplaza hacia abajo pill, hint y preview.
   const hayChipGps = gpsEstado !== 'ok'
+  // Toggle Explorar / Elegir destino bajo el buscador.
+  const hayToggleModo = !rutaActiva && !preview && mapEstado === 'listo'
 
   function centrarme() {
     if (!mapObj.current) {
@@ -1807,22 +1831,24 @@ export default function Usuario() {
               </div>
             )}
 
-            {/* Pill de contactos (mismo estilo que la search bar, bajo el toggle) */}
+            {/* Pill de contactos compacta: justo bajo el buscador (o bajo el toggle Explorar) */}
             <button
               onClick={() => setTab('red')}
-              aria-label="Ver mi círculo de confianza"
-              className={`pointer-events-auto absolute ${hayChipGps ? 'top-[168px]' : 'top-[120px]'} left-3 sm:left-4 inline-flex items-center gap-2.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur px-4 py-2.5 border border-white dark:border-slate-700 text-left shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_28px_rgba(0,0,0,0.12)] transition-shadow`}
+              aria-label={`Ver mi círculo de confianza: ${contactos.length} de 5 contactos`}
+              className={`pointer-events-auto absolute ${
+                hayChipGps ? (hayToggleModo ? 'top-[164px]' : 'top-[116px]') : hayToggleModo ? 'top-[116px]' : 'top-[68px]'
+              } left-3 sm:left-4 inline-flex items-center gap-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur px-3 py-1.5 border border-white dark:border-slate-700 shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-shadow`}
             >
-              <Users size={18} className="text-[#2563EB] shrink-0" />
-              <span className="text-[14px] font-medium text-heading dark:text-white tabular-nums">
-                {contactos.length} de 5 contactos
+              <Users size={14} className="text-[#2563EB] shrink-0" />
+              <span className="text-[12px] font-medium text-heading dark:text-white tabular-nums">
+                {contactos.length}/5 contactos
               </span>
             </button>
 
             {/* Opción A: toggle segmentado Explorar / Elegir destino.
                 Ocupa la franja bajo el buscador; la pill de contactos y la
                 card de preview se desplazan hacia abajo para no solaparse. */}
-            {!rutaActiva && !preview && mapEstado === 'listo' && (
+            {hayToggleModo && (
               <div
                 role="tablist"
                 aria-label="Modo del mapa"
@@ -1895,7 +1921,11 @@ export default function Usuario() {
             )}
 
             {/* Controles del mapa flotantes (derecha; el toggle vive arriba a la izquierda) */}
-            <div className="pointer-events-auto absolute right-3 bottom-64 flex flex-col rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden">
+            <div
+              className={`pointer-events-auto absolute right-3 ${
+                rutaActiva ? 'bottom-[316px] md:bottom-64' : 'bottom-48 md:bottom-64'
+              } flex flex-col rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden`}
+            >
               <button
                 onClick={zoomIn}
                 disabled={!mapaListo}
@@ -1968,20 +1998,24 @@ export default function Usuario() {
             {/* Fila inferior: SOS + acción central (se oculta en modos de selección) */}
             {!seleccionandoDestino && !selReporte && (
             <div className="pointer-events-auto absolute inset-x-3 bottom-4 mb-[88px] flex items-end gap-3">
-              {/* Card flotante de emergencia */}
-              <div className="flex flex-col items-center gap-1 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 px-2.5 py-2.5 shadow-[0_8px_28px_rgba(220,38,38,0.18)] shrink-0">
+              {/* Card flotante de emergencia. Móvil: compacta y a la derecha; con ruta
+                  activa se oculta (la tarjeta de ruta ya trae su botón SOS).
+                  Escritorio (md+): tarjeta grande a la izquierda, como antes. */}
+              <div
+                className={`${rutaActiva ? 'hidden md:flex' : 'flex'} order-last md:order-first flex-col items-center gap-1 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 p-1.5 md:px-2.5 md:py-2.5 shadow-[0_8px_28px_rgba(220,38,38,0.18)] shrink-0`}
+              >
                 <span className="relative flex items-center justify-center">
-                  <span className="sos-ring absolute w-[72px] h-[72px] rounded-full bg-[#DC2626]/25" style={{ animationDuration: '2.5s' }} aria-hidden />
-                  <span className="sos-ring absolute w-[72px] h-[72px] rounded-full bg-[#DC2626]/20" style={{ animationDuration: '2.5s', animationDelay: '0.8s' }} aria-hidden />
+                  <span className="sos-ring absolute w-12 h-12 md:w-[72px] md:h-[72px] rounded-full bg-[#DC2626]/25" style={{ animationDuration: '2.5s' }} aria-hidden />
+                  <span className="sos-ring absolute w-12 h-12 md:w-[72px] md:h-[72px] rounded-full bg-[#DC2626]/20" style={{ animationDuration: '2.5s', animationDelay: '0.8s' }} aria-hidden />
                   <button
                     onClick={activarSOS}
                     aria-label="Botón de pánico SOS. Un solo toque, sin confirmación."
-                    className="relative w-[72px] h-[72px] rounded-full bg-sos text-white border-[3px] border-white/70 shadow-[0_8px_24px_rgba(220,38,38,0.45)] flex flex-col items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+                    className="relative w-12 h-12 md:w-[72px] md:h-[72px] rounded-full bg-sos text-white border-2 md:border-[3px] border-white/70 shadow-[0_8px_24px_rgba(220,38,38,0.45)] flex flex-col items-center justify-center hover:scale-105 active:scale-95 transition-transform"
                   >
-                    <span className="text-[19px] font-bold leading-none tracking-widest">SOS</span>
+                    <span className="text-[13px] md:text-[19px] font-bold leading-none tracking-widest">SOS</span>
                   </button>
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-sos">
+                <span className="hidden md:block text-[10px] font-bold uppercase tracking-[0.12em] text-sos">
                   Emergencia
                 </span>
               </div>
@@ -1989,7 +2023,7 @@ export default function Usuario() {
               {/* Centro inferior: iniciar o ruta activa */}
               <div className="flex-1 min-w-0 flex justify-center">
                 {!rutaActiva ? (
-                  <button
+                  acomp?.estado === 'PENDIENTE' ? null : <button
                     onClick={abrirRuta}
                     className="btn-primary w-full max-w-[340px] py-3.5 text-[15px] !rounded-2xl"
                   >
@@ -1997,38 +2031,48 @@ export default function Usuario() {
                   </button>
                 ) : (
                   <div className="w-full max-w-[420px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 shadow-[0_8px_28px_rgba(37,99,235,0.18)] p-3.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ECFDF5] px-2.5 py-1 text-[11px] font-semibold text-[#059669]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-                        Operador conectado
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-[#ECFDF5] dark:bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-[#059669] dark:text-emerald-300">
+                        <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#10B981] animate-pulse" />
+                        <span className="truncate">Operador conectado</span>
                       </span>
                       <button
                         onClick={activarSOS}
                         aria-label="Botón de pánico SOS. Un solo toque, sin confirmación."
-                        className="w-9 h-9 rounded-full bg-sos text-white text-[11px] font-bold border-2 border-white dark:border-slate-700 shadow-[0_4px_12px_rgba(220,38,38,0.4)] hover:scale-105 active:scale-95 transition-transform shrink-0"
+                        className="h-8 shrink-0 rounded-full bg-sos px-3 text-[11px] font-bold tracking-wider text-white shadow-[0_4px_12px_rgba(220,38,38,0.4)] hover:scale-105 active:scale-95 transition-transform"
                       >
                         SOS
                       </button>
                     </div>
-                    <p className="mt-1.5 text-[14px] font-bold text-heading dark:text-white leading-snug">
+                    <p className="mt-2 text-[14px] font-bold text-heading dark:text-white leading-snug">
                       Tu viaje está siendo monitoreado
                     </p>
-                    <p className="mt-0.5 text-[12px] text-muted dark:text-slate-400 tabular-nums flex items-center gap-1.5">
-                      <Clock3 size={13} className="text-[#2563EB]" />
-                      {elapsedTxt}
-                      {distanciaKm && <span>· {distanciaKm} km</span>}
-                      {etaHora && <span>· llegada ~{etaHora}</span>}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] leading-snug text-muted dark:text-slate-400 tabular-nums">
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                        <Clock3 size={13} className="text-[#2563EB]" />
+                        {elapsedTxt}
+                      </span>
+                      {distanciaKm && <span className="whitespace-nowrap">· {distanciaKm} km</span>}
+                      {etaHora && <span className="whitespace-nowrap">· llegada ~{etaHora}</span>}
                     </p>
-                    <div className="mt-2.5 flex gap-2">
+                    <div className="mt-3 flex gap-2">
                       <button
-                        onClick={() => setShowChat(true)}
-                        className="btn-primary flex-1 py-2.5 text-[13px]"
+                        onClick={() => abrirChat(true)}
+                        className="btn-primary relative flex-[7] min-w-0 whitespace-nowrap py-2.5 text-[13px]"
                       >
                         <MessageCircle size={16} /> Hablar con operador
+                        {noLeidos > 0 && (
+                          <span
+                            className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-sos text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-slate-900"
+                            aria-label={`${noLeidos} mensajes sin leer`}
+                          >
+                            {noLeidos}
+                          </span>
+                        )}
                       </button>
                       <button
                         onClick={terminarRuta}
-                        className="px-3 py-2.5 rounded-[10px] text-[13px] font-semibold text-muted dark:text-slate-400 hover:bg-canvas transition-colors shrink-0"
+                        className="flex-[3] min-w-0 rounded-[10px] border border-line dark:border-slate-700 px-2 py-2.5 text-[13px] font-semibold text-muted dark:text-slate-300 hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
                       >
                         Finalizar
                       </button>
@@ -2148,25 +2192,18 @@ export default function Usuario() {
           </div>
         )}
 
-        {/* Chat: operador con nombre en ruta (acompañamiento), genérico en el resto */}
-        <ChatOperador
-          abierto={showChat}
-          mensajes={mensajes}
-          onToggle={() => setShowChat((v) => !v)}
-          onEnviar={enviarChat}
-          fab={false}
-          modo={rutaActiva && !alertaActiva ? 'acompanamiento' : 'operador'}
-          nombreOperador={OPERADOR_NOMBRE}
-          fotoOperador={FOTO_OPERADOR}
-          escribiendo={operadorEscribiendo}
-          onSolicitarLlamada={() => setAviso('La llamada simulada llega en el siguiente paso 📞')}
-          onActivarSOS={activarSOS}
-          sesionFinalizada={sesionFinalizada}
-          onIniciarNuevaRuta={() => {
-            setShowChat(false)
-            abrirRuta()
-          }}
-        />
+        {/* Chat real con la central: disponible mientras hay un acompañamiento abierto */}
+        {acomp && (
+          <ChatConOperador
+            abierto={showChat}
+            onCerrar={() => abrirChat(false)}
+            estado={acomp.estado}
+            mensajes={chat.mensajes}
+            cargando={chat.cargando}
+            error={chat.error}
+            onEnviar={chat.enviar}
+          />
+        )}
       </main>
 
       {/* Navbar inferior fija */}
@@ -2218,6 +2255,15 @@ export default function Usuario() {
           onSeleccionarUbicacion={abrirSelectorReporte}
           onCerrar={() => setShowReporte(false)}
           onGuardar={enviarReporte}
+        />
+      )}
+
+      {acomp?.estado === 'PENDIENTE' && (
+        <BuscandoOperador
+          destino={acomp.destino}
+          cancelando={cancelandoAcomp}
+          onCancelar={cancelarSolicitud}
+          onChat={() => abrirChat(true)}
         />
       )}
 
