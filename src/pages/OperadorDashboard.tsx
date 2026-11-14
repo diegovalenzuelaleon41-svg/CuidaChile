@@ -2,8 +2,9 @@
  * Panel de Operador — Centro de Comando (Fase 2), estilo "Dark Control Room".
  *
  * Dashboard desktop-first, sin scroll general (h-screen).
- * Tres columnas + header superior. Los acompañamientos son reales (tabla
- * acompanamientos + Supabase Realtime); SOS y Barrial siguen siendo mock.
+ * Tres columnas + header superior. SOS (tabla alertas) y acompañamientos
+ * (tabla acompanamientos) son reales vía Supabase Realtime; Barrial sigue
+ * siendo mock.
  *
  * Ruta: /operador/dashboard
  */
@@ -34,7 +35,9 @@ import ChatCiudadano, { type MotivoSinChat } from '../components/operador/ChatCi
 import { useChatAcompanamiento } from '../hooks/useChatAcompanamiento'
 import { useAuth } from '../auth/AuthContext'
 import { useAcompanamientosOperador, useSeguimientoAcompanamiento } from '../hooks/useAcompanamientosOperador'
+import { useAlertasSOSOperador } from '../hooks/useAlertasSOSOperador'
 import type { Acompanamiento } from '../lib/acompanamientos'
+import type { AlertaSOS } from '../lib/alertas'
 import {
   MOCK_ALERTAS,
   COLOR_NEON,
@@ -213,21 +216,80 @@ function acompanamientoAAlerta(a: Acompanamiento): Alerta {
   }
 }
 
+/* ──────────────────── SOS reales → tarjetas ──────────────────── */
+
+function sosAAlerta(a: AlertaSOS): Alerta {
+  const timeline = [`${horaDe(a.creada_en)} - Alerta SOS recibida`]
+  if (a.lat == null || a.lng == null) timeline.push(`${horaDe(a.creada_en)} - Sin ubicación GPS del ciudadano`)
+  if (a.atendida_en) timeline.push(`${horaDe(a.atendida_en)} - Atendiste la alerta`)
+  if (a.estado === 'resuelta' && a.cerrada_en) timeline.push(`${horaDe(a.cerrada_en)} - Alerta marcada como resuelta`)
+  return {
+    id: a.id,
+    tipo: 'SOS',
+    nombre: a.usuario_nombre ?? 'Usuario CuidaChile',
+    telefono: a.usuario_telefono ?? '',
+    hora: horaDe(a.creada_en),
+    lat: a.lat ?? SANTIAGO_CENTRO.lat,
+    lng: a.lng ?? SANTIAGO_CENTRO.lng,
+    sinUbicacion: a.lat == null || a.lng == null,
+    creadoEn: a.creada_en,
+    aceptadoEn: a.atendida_en ?? undefined,
+    actualizadoEn: a.actualizado_en,
+    estado: a.estado === 'activa' ? 'PENDIENTE' : a.estado === 'en_atencion' ? 'EN_PROCESO' : 'RESUELTA',
+    timeline,
+  }
+}
+
+/** Alarma corta (dos tonos) al llegar un SOS. Sin archivos de audio. */
+function sonarAlarmaSOS() {
+  try {
+    const ctx = new AudioContext()
+    ;[0, 0.28].forEach((t) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'square'
+      osc.frequency.value = 880
+      gain.gain.setValueAtTime(0.08, ctx.currentTime + t)
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.22)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(ctx.currentTime + t)
+      osc.stop(ctx.currentTime + t + 0.24)
+    })
+    setTimeout(() => void ctx.close(), 800)
+  } catch {
+    /* sin audio (permisos de autoplay): la tarjeta igual aparece */
+  }
+}
+
 export default function OperadorDashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
+
+  /* ── Aviso flotante (también lo usan los hooks en vivo) ── */
+  const [aviso, setAviso] = useState<string | null>(null)
+
+  /* ── SOS reales (Realtime) ── */
+  const sos = useAlertasSOSOperador(user?.id, {
+    onNueva: (a) => {
+      sonarAlarmaSOS()
+      setAviso(`Nueva alerta SOS de ${a.usuario_nombre ?? 'un ciudadano'}.`)
+    },
+    onCancelada: (a) => setAviso(`${a.usuario_nombre ?? 'El ciudadano'} canceló su alerta SOS.`),
+  })
+  const idsSOS = new Set(sos.lista.map((a) => a.id))
 
   /* ── Acompañamientos reales (Realtime) ── */
   const acomp = useAcompanamientosOperador(user?.id)
   const idsReales = new Set(acomp.lista.map((a) => a.id))
 
   /* ── Estado ── */
-  // Mock solo para SOS/Barrial: los acompañamientos vienen de Supabase.
+  // Mock solo para Barrial: SOS y acompañamientos vienen de Supabase.
   const [alertasMock, setAlertasMock] = useState<Alerta[]>(() =>
-    MOCK_ALERTAS.filter((a) => a.tipo !== 'ACOMPANAMIENTO').map((a) => ({ ...a, timeline: [...a.timeline] }))
+    MOCK_ALERTAS.map((a) => ({ ...a, timeline: [...a.timeline] }))
   )
   // Las descartadas salen de la bandeja (las reales ya no vienen de Supabase).
   const alertas = [
+    ...sos.lista.map(sosAAlerta),
     ...acomp.lista.map(acompanamientoAAlerta),
     ...alertasMock.filter((a) => a.estado !== 'DESCARTADA'),
   ]
@@ -237,7 +299,6 @@ export default function OperadorDashboard() {
   // Por id: la tarjeta seleccionada se recalcula con cada cambio en vivo.
   const [seleccionId, setSeleccionId] = useState<string | null>(null)
   const alertaSeleccionada = alertas.find((a) => a.id === seleccionId) ?? null
-  const [aviso, setAviso] = useState<string | null>(null)
   // Reloj para el "Tiempo" del acompañamiento seleccionado.
   const [ahora, setAhora] = useState(() => Date.now())
   useEffect(() => {
@@ -259,12 +320,14 @@ export default function OperadorDashboard() {
   useSeguimientoAcompanamiento(idSeguido, (lat, lng) => {
     if (idSeguido) acomp.moverUsuario(idSeguido, lat, lng)
   })
+  /** En vivo: el acompañamiento seguido o cualquier SOS en atención (su GPS llega en la misma fila). */
+  const esEnVivo = (a: Alerta) => idSeguido === a.id || (idsSOS.has(a.id) && a.estado === 'EN_PROCESO')
 
   /* ── Acciones ── */
 
   const alertasFiltradas = filtrarPorTipo(alertas, tabActivo)
 
-  /** Solo alertas mock (SOS/Barrial): los acompañamientos se actualizan en Supabase. */
+  /** Solo alertas mock (Barrial): SOS y acompañamientos se actualizan en Supabase. */
   const actualizarAlertaMock = (id: string, estado: Alerta['estado'], accionTexto: string) => {
     const accionCompleta = `${ahoraHHMM()} - ${accionTexto}`
     setAlertasMock((prev) =>
@@ -273,6 +336,16 @@ export default function OperadorDashboard() {
   }
 
   const manejarAccion = async (alerta: Alerta) => {
+    if (idsSOS.has(alerta.id)) {
+      const error = await sos.atender(alerta.id)
+      if (error) {
+        setAviso(error)
+        return
+      }
+      setSeleccionId(alerta.id)
+      setAviso(`Atendiendo SOS de ${alerta.nombre}.`)
+      return
+    }
     if (!idsReales.has(alerta.id)) {
       actualizarAlertaMock(alerta.id, 'EN_PROCESO', btnAccionTexto(alerta.tipo))
       return
@@ -289,7 +362,13 @@ export default function OperadorDashboard() {
 
   const confirmarRechazo = async (alerta: Alerta, motivo: string) => {
     setPorRechazar(null)
-    if (idsReales.has(alerta.id)) {
+    if (idsSOS.has(alerta.id)) {
+      const error = await sos.descartar(alerta.id, motivo)
+      if (error) {
+        setAviso(error)
+        return
+      }
+    } else if (idsReales.has(alerta.id)) {
       const error = await acomp.descartar(alerta.id, motivo)
       if (error) {
         setAviso(error)
@@ -305,6 +384,11 @@ export default function OperadorDashboard() {
 
   const marcarResuelta = async () => {
     if (!alertaSeleccionada) return
+    if (idsSOS.has(alertaSeleccionada.id)) {
+      const error = await sos.resolver(alertaSeleccionada.id)
+      if (error) setAviso(error)
+      return
+    }
     if (!idsReales.has(alertaSeleccionada.id)) {
       actualizarAlertaMock(alertaSeleccionada.id, 'RESUELTA', 'Alerta marcada como resuelta')
       return
@@ -314,11 +398,12 @@ export default function OperadorDashboard() {
   }
 
   const esAcompanamientoReal = !!alertaSeleccionada && idsReales.has(alertaSeleccionada.id)
+  const esSOSReal = !!alertaSeleccionada && idsSOS.has(alertaSeleccionada.id)
   const resolverDeshabilitado =
     !alertaSeleccionada ||
     alertaSeleccionada.estado === 'RESUELTA' ||
-    // Un acompañamiento se finaliza solo después de aceptarlo.
-    (esAcompanamientoReal && alertaSeleccionada.estado !== 'EN_PROCESO')
+    // Un acompañamiento o SOS real se cierra solo después de tomarlo.
+    ((esAcompanamientoReal || esSOSReal) && alertaSeleccionada.estado !== 'EN_PROCESO')
 
   /* ── Chat con el ciudadano (solo acompañamientos reales ya aceptados) ── */
   const [panelDerecho, setPanelDerecho] = useState<'bitacora' | 'chat'>('bitacora')
@@ -426,9 +511,9 @@ export default function OperadorDashboard() {
             </div>
           </div>
 
-          {(aviso || acomp.error) && (
+          {(aviso || sos.error || acomp.error) && (
             <div role="status" className="mx-3 mb-1 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              {aviso ?? acomp.error}
+              {aviso ?? sos.error ?? acomp.error}
             </div>
           )}
 
@@ -437,6 +522,10 @@ export default function OperadorDashboard() {
             {acomp.cargando && tabActivo === 'ACOMPANAMIENTO' ? (
               <div className="flex items-center justify-center h-32 gap-2 text-slate-500 text-sm">
                 <Loader2 size={16} className="animate-spin" /> Cargando acompañamientos…
+              </div>
+            ) : sos.cargando && tabActivo === 'SOS' ? (
+              <div className="flex items-center justify-center h-32 gap-2 text-slate-500 text-sm">
+                <Loader2 size={16} className="animate-spin" /> Cargando alertas SOS…
               </div>
             ) : alertasFiltradas.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-slate-500 text-sm">
@@ -448,7 +537,7 @@ export default function OperadorDashboard() {
                   key={alerta.id}
                   alerta={alerta}
                   estaSeleccionada={sel?.id === alerta.id}
-                  enVivo={idSeguido === alerta.id}
+                  enVivo={esEnVivo(alerta)}
                   onClick={() => setSeleccionId(alerta.id)}
                   onAccion={() => void manejarAccion(alerta)}
                   onRechazar={() => setPorRechazar(alerta)}
@@ -468,7 +557,7 @@ export default function OperadorDashboard() {
                 lat: sel.lat,
                 lng: sel.lng,
                 sinUbicacion: sel.sinUbicacion,
-                enVivo: idSeguido === sel.id,
+                enVivo: esEnVivo(sel),
               }
             }
             ruta={sel?.rutaCoords ?? null}
@@ -515,9 +604,9 @@ export default function OperadorDashboard() {
                   </p>
                 )}
 
-                {esAcompanamientoReal && (
+                {(esAcompanamientoReal || esSOSReal) && (
                   <p className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                    {idSeguido && !sel.sinUbicacion ? (
+                    {esEnVivo(sel) && !sel.sinUbicacion ? (
                       <>
                         <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse" aria-hidden />
                         Ubicación en vivo: {sel.actualizadoEn && horaLarga(sel.actualizadoEn)}
@@ -525,7 +614,7 @@ export default function OperadorDashboard() {
                     ) : sel.sinUbicacion ? (
                       'Sin ubicación GPS todavía'
                     ) : sel.estado === 'PENDIENTE' ? (
-                      'Acepta el monitoreo para seguir su ubicación en vivo'
+                      esSOSReal ? 'Atiende la alerta para seguir su ubicación en vivo' : 'Acepta el monitoreo para seguir su ubicación en vivo'
                     ) : null}
                   </p>
                 )}

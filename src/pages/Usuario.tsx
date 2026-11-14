@@ -7,8 +7,8 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 // Sin esto el mapa falla con "Worker failed to load" y nunca dispara 'load'.
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
-  CheckCircle2, Clock3, Crosshair, Hand, LocateFixed, MapPin, MessageCircle,
-  Minus, Navigation, Play, Plus, Search, TriangleAlert, Users, X,
+  CheckCircle2, Clock3, Crosshair, LocateFixed, MapPin, MessageCircle,
+  Minus, Moon, Navigation, Plus, Search, Sun, Users, X,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../hooks/useTheme'
@@ -27,9 +27,13 @@ import HistorialLista from '../components/usuario/HistorialLista'
 import ChatConOperador from '../components/usuario/ChatConOperador'
 import { useChatAcompanamiento } from '../hooks/useChatAcompanamiento'
 import BuscandoOperador from '../components/usuario/BuscandoOperador'
+import BotonSOS from '../components/usuario/BotonSOS'
+import BotonIniciarRuta from '../components/usuario/BotonIniciarRuta'
+import BotonReportar from '../components/usuario/BotonReportar'
 import { useAcompanamiento } from '../hooks/useAcompanamiento'
+import { useSOS } from '../hooks/useSOS'
 import type { Acompanamiento } from '../lib/acompanamientos'
-import { ModalRuta, ModalContacto, ModalSOS, ModalReporte, type FormContacto, type FormReporte } from '../components/usuario/Modales'
+import { ModalRuta, ModalContacto, ModalSOS, ModalReporte, type EstadoModalSOS, type FormContacto, type FormReporte } from '../components/usuario/Modales'
 
 // Reporte comunitario: pin visible 6 h; a las 2 h se atenúa a amarillo.
 interface Reporte {
@@ -130,7 +134,7 @@ function fmtDur(ms: number) {
 export default function Usuario() {
   // La ruta está envuelta en <Protected>: aquí siempre hay sesión.
   const { user, signOut } = useAuth()
-  const { esOscuro } = useTheme()
+  const { esOscuro, toggleTheme } = useTheme()
   // Tema aplicado al estilo del mapa (evita setStyle redundantes).
   const temaMapaRef = useRef<boolean | null>(null)
   // Generación del estilo: cambia en cada 'load' (incluido setStyle por tema)
@@ -241,6 +245,12 @@ export default function Usuario() {
     limpiar: limpiarAcomp,
   } = useAcompanamiento(user?.id, () => gpsRealRef.current)
   const [cancelandoAcomp, setCancelandoAcomp] = useState(false)
+  // Entre confirmar la ruta y que exista la solicitud: el botón muestra "Buscando operador…".
+  const [solicitandoRuta, setSolicitandoRuta] = useState(false)
+  // SOS real (tabla alertas + Realtime): mismo GPS real que el acompañamiento.
+  const sos = useSOS(user?.id, () => gpsRealRef.current)
+  const [sosError, setSosError] = useState(false)
+  const [cancelandoSos, setCancelandoSos] = useState(false)
   // Chat real con el operador de la central (tabla mensajes + Realtime).
   const chat = useChatAcompanamiento(acomp?.id ?? null, 'usuario')
   // Mensajes del operador ya vistos (se marca al abrir/cerrar el chat).
@@ -1098,20 +1108,56 @@ export default function Usuario() {
 
   async function activarSOS() {
     // SIN confirmación — spec §6.3 / §9
-    setAlerta(true)
     setShowSosModal(true)
-    try {
-      await supabase.from('alertas').insert({
-        usuario_id: user?.id,
-        tipo: 'sos',
-        lat: pos[1],
-        lng: pos[0],
-        estado: 'activa',
-      })
-    } catch {
-      /* la tabla puede no existir aún en local; la alerta visual no se bloquea */
-    }
+    setSosError(false)
+    // Ya hay una abierta: solo volver a mostrar su estado.
+    if (sos.abierta) return
+    const error = await sos.activar()
+    if (error) setSosError(true)
   }
+
+  async function cancelarSOS() {
+    setCancelandoSos(true)
+    const error = await sos.cancelar()
+    setCancelandoSos(false)
+    if (error) {
+      setAviso(error)
+      return
+    }
+    setShowSosModal(false)
+    setAviso('Alerta SOS cancelada.')
+  }
+
+  // El header ("Alerta activa") sigue al SOS real, no a un flag local.
+  useEffect(() => {
+    setAlerta(sos.abierta)
+  }, [sos.abierta, setAlerta])
+
+  // Al retomar un SOS abierto (recarga) se vuelve a mostrar su estado.
+  const sosMostradoRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!sos.alerta || !sos.abierta || sosMostradoRef.current === sos.alerta.id) return
+    sosMostradoRef.current = sos.alerta.id
+    setShowSosModal(true)
+  }, [sos.alerta, sos.abierta])
+
+  // La central cerró la alerta: avisar y volver al estado normal.
+  const estadoSos = sos.alerta?.estado
+  const limpiarSos = sos.limpiar
+  useEffect(() => {
+    if (estadoSos !== 'resuelta' && estadoSos !== 'descartada' && estadoSos !== 'cancelada') return
+    setShowSosModal(false)
+    setAviso(estadoSos === 'resuelta' ? 'La central cerró tu alerta SOS.' : 'Tu alerta SOS fue cerrada.')
+    limpiarSos()
+  }, [estadoSos, limpiarSos])
+
+  const estadoModalSos: EstadoModalSOS = sosError
+    ? 'error'
+    : sos.enviando || !sos.alerta
+      ? 'enviando'
+      : sos.alerta.estado === 'en_atencion'
+        ? 'en_atencion'
+        : 'activa'
 
   // ── Pin central: entrar / salir / confirmar ──────────────────────────
   // El mapa es 100% explorable (click, drag, zoom no eligen nada).
@@ -1135,13 +1181,6 @@ export default function Usuario() {
     setSeleccionandoDestino(false)
     setCentroMapa(null)
     setCentroMovido(false)
-  }
-
-  // ── Opción A: control segmentado de modos ───────────────────────────
-  const modoMapa: 'explorar' | 'elegir' = seleccionandoDestino ? 'elegir' : 'explorar'
-  function setModoMapa(m: 'explorar' | 'elegir') {
-    if (m === 'elegir') iniciarSeleccionEnMapa()
-    else cancelarSeleccion()
   }
 
   async function confirmarCentro() {
@@ -1316,6 +1355,21 @@ export default function Usuario() {
       setAviso('Ya tienes una ruta segura en curso.')
       return
     }
+    setSolicitandoRuta(true)
+    try {
+      await solicitarRutaSegura(destinoTxt, destCoords, origenTxtOverride, origenCoordsOverride)
+    } finally {
+      setSolicitandoRuta(false)
+    }
+  }
+
+  async function solicitarRutaSegura(
+    destinoTxt: string,
+    destCoords: { lat: number; lng: number } | null,
+    origenTxtOverride?: string,
+    origenCoordsOverride?: { lat: number; lng: number } | null,
+  ) {
+    if (!user) return
     const inicioIso = new Date().toISOString()
     // Origen: manual exacto si el usuario lo escribió/eligió, si no GPS actual.
     const oLng = origenCoordsOverride?.lng ?? pos[0]
@@ -1493,11 +1547,14 @@ export default function Usuario() {
     if (!destino.trim() || !user) return
     const origenTxt = origen.trim() || dirActual || 'Ubicación actual'
     const origenCoords = origenSel ? { lat: origenSel.lat, lng: origenSel.lng } : null
-    await activarRuta(destino.trim(), destSel ? { lat: destSel.lat, lng: destSel.lng } : null, origenTxt, origenCoords)
+    const destinoTxt = destino.trim()
+    const destCoords = destSel ? { lat: destSel.lat, lng: destSel.lng } : null
+    // Se cierra primero: el usuario ve el botón pasar a "Buscando operador…".
     setShowRuta(false)
     setDestino('')
     setDestSel(null)
     setSugs([])
+    await activarRuta(destinoTxt, destCoords, origenTxt, origenCoords)
   }
 
   async function confirmarPreview() {
@@ -1706,10 +1763,6 @@ export default function Usuario() {
   }, [destKey, estiloKey])
 
   const mapaListo = mapEstado === 'listo' && !!mapObj.current
-  // Cualquier chip GPS visible desplaza hacia abajo pill, hint y preview.
-  const hayChipGps = gpsEstado !== 'ok'
-  // Toggle Explorar / Elegir destino bajo el buscador.
-  const hayToggleModo = !rutaActiva && !preview && mapEstado === 'listo'
 
   function centrarme() {
     if (!mapObj.current) {
@@ -1747,7 +1800,7 @@ export default function Usuario() {
       style={{ height: '100dvh' }}
     >
       {/* Único header sticky */}
-      <DashboardHeader nombre={nombre} alertaActiva={alertaActiva} protegido={protegido} onSignOut={() => signOut()} />
+      <DashboardHeader alertaActiva={alertaActiva} protegido={protegido} />
 
       {/* Mapa protagonista: fondo de la pantalla.
           min-h-0 es obligatorio: sin él, el hijo flex con solo hijos
@@ -1768,216 +1821,132 @@ export default function Usuario() {
           onBuscarManual={abrirRuta}
         />
 
-        {/* ── Tab Inicio: elementos flotantes sobre el mapa ── */}
+        {/* ── Tab Inicio: elementos flotantes sobre el mapa ──
+            Dos columnas flex (arriba y abajo) en vez de coordenadas fijas: cada
+            elemento se apila según su alto real y nada queda tapado. */}
         {tab === 'inicio' && (
           <div className="absolute inset-0 z-20 pointer-events-none">
-            {/* Barra de búsqueda flotante */}
-            <button
-              onClick={abrirRuta}
-              className="pointer-events-auto absolute top-3 left-3 right-3 sm:left-4 sm:right-auto sm:w-[380px] flex items-center gap-2.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur px-4 py-3 border border-white dark:border-slate-700 text-left shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_28px_rgba(0,0,0,0.12)] transition-shadow"
-              aria-label="Buscar destino"
-            >
-              <Search size={18} className="text-[#2563EB] shrink-0" />
-              <span className="text-[15px] truncate text-[#94A3B8] dark:text-slate-500">
-                {rutaActiva ? rutaActiva.destino : '¿A dónde vas?'}
-              </span>
-            </button>
-
-            {gpsEstado === 'pendiente' && (
-              <div className="pointer-events-auto absolute top-[68px] left-3 right-3 sm:left-4 sm:right-auto sm:max-w-[380px] flex items-center gap-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 px-4 py-2.5 shadow-sm">
-                <span className="w-4 h-4 rounded-full border-2 border-[#2563EB]/20 border-t-[#2563EB] animate-spin shrink-0" aria-hidden />
-                <p className="text-[12px] font-medium text-muted dark:text-slate-400 leading-snug">
-                  Localizando tu ubicación…{acc != null ? ` GPS ±${Math.round(acc)} m` : ''}
-                </p>
-              </div>
-            )}
-
-            {gpsEstado === 'denegado' && (
-              <button
-                onClick={reintentarGps}
-                aria-label="Reintentar obtener mi ubicación"
-                className="pointer-events-auto absolute top-[68px] left-3 right-3 sm:left-4 sm:right-auto sm:max-w-[380px] flex items-center gap-2 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] px-4 py-2.5 shadow-sm text-left"
-              >
-                <LocateFixed size={16} className="text-[#D97706] shrink-0" />
-                <p className="text-[12px] font-medium text-[#92400E] leading-snug">
-                  {permisoGps === 'denied'
-                    ? 'Ubicación bloqueada en el navegador — actívala en el candado de la URL y toca para reintentar.'
-                    : permisoGps === 'prompt'
-                      ? 'Permiso de ubicación pendiente — toca para permitir tu ubicación.'
-                      : 'GPS desactivado — ubicación aproximada. Toca para reintentar.'}
-                </p>
-              </button>
-            )}
-
-            {gpsEstado === 'error' && (
-              <button
-                onClick={reintentarGps}
-                aria-label="Reintentar obtener mi ubicación"
-                className="pointer-events-auto absolute top-[68px] left-3 right-3 sm:left-4 sm:right-auto sm:max-w-[380px] flex items-center gap-2 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] px-4 py-2.5 shadow-sm text-left"
-              >
-                <LocateFixed size={16} className="text-sos shrink-0" />
-                <p className="text-[12px] font-medium text-sos leading-snug">
-                  No pudimos obtener tu ubicación{gpsDetalle ? ` — ${gpsDetalle}` : ''} Toca para reintentar.
-                </p>
-              </button>
-            )}
-
-            {gpsEstado === 'sin-soporte' && (
-              <div className="pointer-events-auto absolute top-[68px] left-3 right-3 sm:left-4 sm:right-auto sm:max-w-[380px] flex items-center gap-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 px-4 py-2.5 shadow-sm">
-                <LocateFixed size={16} className="text-muted dark:text-slate-400 shrink-0" />
-                <p className="text-[12px] font-medium text-muted dark:text-slate-400 leading-snug">
-                  {gpsDetalle ?? 'Este dispositivo no tiene GPS — ubicación aproximada.'}
-                </p>
-              </div>
-            )}
-
-            {/* Pill de contactos compacta: justo bajo el buscador (o bajo el toggle Explorar) */}
-            <button
-              onClick={() => setTab('red')}
-              aria-label={`Ver mi círculo de confianza: ${contactos.length} de 5 contactos`}
-              className={`pointer-events-auto absolute ${
-                hayChipGps ? (hayToggleModo ? 'top-[164px]' : 'top-[116px]') : hayToggleModo ? 'top-[116px]' : 'top-[68px]'
-              } left-3 sm:left-4 inline-flex items-center gap-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur px-3 py-1.5 border border-white dark:border-slate-700 shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-shadow`}
-            >
-              <Users size={14} className="text-[#2563EB] shrink-0" />
-              <span className="text-[12px] font-medium text-heading dark:text-white tabular-nums">
-                {contactos.length}/5 contactos
-              </span>
-            </button>
-
-            {/* Opción A: toggle segmentado Explorar / Elegir destino.
-                Ocupa la franja bajo el buscador; la pill de contactos y la
-                card de preview se desplazan hacia abajo para no solaparse. */}
-            {hayToggleModo && (
-              <div
-                role="tablist"
-                aria-label="Modo del mapa"
-                className={`pointer-events-auto absolute ${hayChipGps ? 'top-[116px]' : 'top-[68px]'} left-3 sm:left-4 inline-flex items-center gap-1 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-white dark:border-slate-700 p-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)]`}
-              >
+            {/* ── Zona superior: búsqueda + contactos, avisos GPS, destino, reportar ── */}
+            <div className="absolute inset-x-0 top-0 p-3 flex flex-col items-stretch sm:items-start gap-2">
+              <div className="pointer-events-auto sm:w-[400px] flex items-center gap-1 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)]">
                 <button
-                  role="tab"
-                  aria-selected={modoMapa === 'explorar'}
-                  onClick={() => setModoMapa('explorar')}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
-                    modoMapa === 'explorar'
-                      ? 'bg-[#2563EB] text-white shadow-[0_2px_10px_rgba(37,99,235,0.45)]'
-                      : 'text-muted dark:text-slate-400 hover:bg-[#EFF6FF] hover:text-[#2563EB] dark:hover:bg-slate-800 dark:hover:text-[#93C5FD]'
-                  }`}
+                  onClick={abrirRuta}
+                  className="flex-1 min-w-0 h-11 flex items-center gap-2.5 rounded-xl px-3 text-left hover:bg-white/5 transition-colors"
+                  aria-label="Buscar destino"
                 >
-                  <Hand size={15} /> Explorar
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={modoMapa === 'elegir'}
-                  onClick={() => setModoMapa('elegir')}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
-                    modoMapa === 'elegir'
-                      ? 'bg-[#2563EB] text-white shadow-[0_2px_10px_rgba(37,99,235,0.45)]'
-                      : 'text-muted dark:text-slate-400 hover:bg-[#EFF6FF] hover:text-[#2563EB] dark:hover:bg-slate-800 dark:hover:text-[#93C5FD]'
-                  }`}
-                >
-                  <MapPin size={15} /> Elegir destino
-                </button>
-              </div>
-            )}
-
-            {/* Card del destino seleccionado */}
-            {!rutaActiva && preview && (
-              <div className={`pointer-events-auto absolute ${hayChipGps ? 'top-[216px]' : 'top-[168px]'} left-3 right-3 sm:left-4 sm:right-auto sm:w-[380px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur px-4 py-3 border border-white dark:border-slate-700 shadow-[0_8px_28px_rgba(0,0,0,0.12)]`}>
-                <div className="flex items-start gap-2.5">
-                  <span className="w-9 h-9 rounded-xl bg-[#FEF2F2] text-sos flex items-center justify-center shrink-0">
-                    <MapPin size={18} />
+                  <Search size={18} className="text-[#60A5FA] shrink-0" />
+                  <span className={`text-[15px] truncate ${rutaActiva ? 'text-white' : 'text-slate-400'}`}>
+                    {rutaActiva ? rutaActiva.destino : '¿A dónde vas?'}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-faint dark:text-slate-500">
-                      Destino seleccionado
-                    </p>
-                    <p className="text-[14px] font-semibold text-heading dark:text-white leading-snug">
-                      {previewCargando ? 'Buscando dirección…' : preview.etiqueta}
-                    </p>
-                    {previewInfo && (
-                      <p className="mt-0.5 text-[12px] text-muted dark:text-slate-400 tabular-nums">
-                        {(previewInfo.distanciaM / 1000).toFixed(1)} km · ~
-                        {Math.max(1, Math.round(previewInfo.duracionS / 60))} min en auto
+                </button>
+                <span className="w-px h-6 bg-white/10" aria-hidden />
+                <button
+                  onClick={() => setTab('red')}
+                  aria-label={`Ver mi círculo de confianza: ${contactos.length} de 5 contactos`}
+                  title="Mi círculo de confianza"
+                  className="relative w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+                >
+                  <Users size={19} />
+                  <span className="absolute bottom-0.5 right-0 rounded-full bg-blue-600 px-1 text-[9px] font-bold leading-[14px] text-white tabular-nums ring-2 ring-slate-900">
+                    {contactos.length}/5
+                  </span>
+                </button>
+              </div>
+
+              {gpsEstado === 'pendiente' && (
+                <div className="pointer-events-auto sm:max-w-[400px] flex items-center gap-2 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2.5">
+                  <span className="w-4 h-4 rounded-full border-2 border-[#60A5FA]/25 border-t-[#60A5FA] animate-spin shrink-0" aria-hidden />
+                  <p className="text-[12px] font-medium text-slate-300 leading-snug">
+                    Localizando tu ubicación…{acc != null ? ` GPS ±${Math.round(acc)} m` : ''}
+                  </p>
+                </div>
+              )}
+
+              {gpsEstado === 'denegado' && (
+                <button
+                  onClick={reintentarGps}
+                  aria-label="Reintentar obtener mi ubicación"
+                  className="pointer-events-auto sm:max-w-[400px] flex items-center gap-2 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] px-4 py-2.5 shadow-sm text-left"
+                >
+                  <LocateFixed size={16} className="text-[#D97706] shrink-0" />
+                  <p className="text-[12px] font-medium text-[#92400E] leading-snug">
+                    {permisoGps === 'denied'
+                      ? 'Ubicación bloqueada en el navegador — actívala en el candado de la URL y toca para reintentar.'
+                      : permisoGps === 'prompt'
+                        ? 'Permiso de ubicación pendiente — toca para permitir tu ubicación.'
+                        : 'GPS desactivado — ubicación aproximada. Toca para reintentar.'}
+                  </p>
+                </button>
+              )}
+
+              {gpsEstado === 'error' && (
+                <button
+                  onClick={reintentarGps}
+                  aria-label="Reintentar obtener mi ubicación"
+                  className="pointer-events-auto sm:max-w-[400px] flex items-center gap-2 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] px-4 py-2.5 shadow-sm text-left"
+                >
+                  <LocateFixed size={16} className="text-sos shrink-0" />
+                  <p className="text-[12px] font-medium text-sos leading-snug">
+                    No pudimos obtener tu ubicación{gpsDetalle ? ` — ${gpsDetalle}` : ''} Toca para reintentar.
+                  </p>
+                </button>
+              )}
+
+              {gpsEstado === 'sin-soporte' && (
+                <div className="pointer-events-auto sm:max-w-[400px] flex items-center gap-2 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2.5">
+                  <LocateFixed size={16} className="text-slate-400 shrink-0" />
+                  <p className="text-[12px] font-medium text-slate-300 leading-snug">
+                    {gpsDetalle ?? 'Este dispositivo no tiene GPS — ubicación aproximada.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Card del destino elegido en el mapa */}
+              {!rutaActiva && preview && (
+                <div className="pointer-events-auto sm:w-[400px] rounded-2xl bg-slate-900/90 backdrop-blur-xl px-4 py-3 border border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.35)]">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-9 h-9 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
+                      <MapPin size={18} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Destino seleccionado
                       </p>
-                    )}
+                      <p className="text-[14px] font-semibold text-white leading-snug">
+                        {previewCargando ? 'Buscando dirección…' : preview.etiqueta}
+                      </p>
+                      {previewInfo && (
+                        <p className="mt-0.5 text-[12px] text-slate-400 tabular-nums">
+                          {(previewInfo.distanciaM / 1000).toFixed(1)} km · ~
+                          {Math.max(1, Math.round(previewInfo.duracionS / 60))} min en auto
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={limpiarPreview}
+                      aria-label="Cancelar destino"
+                      className="w-11 h-11 -mr-2 -mt-1.5 rounded-full hover:bg-white/10 text-slate-400 flex items-center justify-center transition-colors shrink-0"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
                   <button
-                    onClick={limpiarPreview}
-                    aria-label="Cancelar destino"
-                    className="w-8 h-8 rounded-full hover:bg-canvas dark:hover:bg-slate-800 text-muted dark:text-slate-400 flex items-center justify-center transition-colors shrink-0"
+                    onClick={confirmarPreview}
+                    disabled={previewCargando}
+                    className="w-full mt-2.5 h-12 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[14px] font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
                   >
-                    <X size={16} />
+                    <Navigation size={16} /> Iniciar ruta aquí
                   </button>
                 </div>
-                <button
-                  onClick={confirmarPreview}
-                  disabled={previewCargando}
-                  className="btn-primary w-full mt-2.5 py-2.5 text-[14px] disabled:opacity-50"
-                >
-                  <Navigation size={16} /> Iniciar ruta aquí
-                </button>
-              </div>
-            )}
+              )}
 
-            {/* Controles del mapa flotantes (derecha; el toggle vive arriba a la izquierda) */}
-            <div
-              className={`pointer-events-auto absolute right-3 ${
-                rutaActiva ? 'bottom-[316px] md:bottom-64' : 'bottom-48 md:bottom-64'
-              } flex flex-col rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden`}
-            >
-              <button
-                onClick={zoomIn}
-                disabled={!mapaListo}
-                aria-label="Acercar"
-                title={mapaListo ? 'Acercar' : 'Mapa cargando…'}
-                className="w-10 h-10 flex items-center justify-center text-heading dark:text-white hover:bg-[#EFF6FF] dark:hover:bg-slate-800 hover:text-[#2563EB] dark:hover:text-[#93C5FD] transition-colors disabled:opacity-40"
-              >
-                <Plus size={18} />
-              </button>
-              <span className="h-px bg-line dark:bg-slate-700" aria-hidden />
-              <button
-                onClick={zoomOut}
-                disabled={!mapaListo}
-                aria-label="Alejar"
-                title={mapaListo ? 'Alejar' : 'Mapa cargando…'}
-                className="w-10 h-10 flex items-center justify-center text-heading dark:text-white hover:bg-[#EFF6FF] dark:hover:bg-slate-800 hover:text-[#2563EB] dark:hover:text-[#93C5FD] transition-colors disabled:opacity-40"
-              >
-                <Minus size={18} />
-              </button>
-              <span className="h-px bg-line dark:bg-slate-700" aria-hidden />
-              <button
-                onClick={centrarme}
-                disabled={!mapaListo}
-                aria-label="Centrar en mi ubicación"
-                title={mapaListo ? 'Centrar en mi ubicación' : 'Mapa cargando…'}
-                className="w-10 h-10 flex items-center justify-center text-[#2563EB] hover:bg-[#EFF6FF] dark:hover:bg-slate-800 transition-colors disabled:opacity-40"
-              >
-                <LocateFixed size={18} />
-              </button>
+              {/* Reportar: arriba a la derecha, lejos de la zona del pulgar y del SOS */}
+              {!rutaActiva && !preview && !seleccionandoDestino && !selReporte && (
+                <div className="pointer-events-auto self-end">
+                  <BotonReportar onClick={() => setShowReporte(true)} cantidad={reportes.length} />
+                </div>
+              )}
             </div>
-
-            {/* FAB Reportar: solo en exploración pura (sin ruta, previa ni selección) */}
-            {!rutaActiva && !preview && !seleccionandoDestino && !selReporte && (
-              <div className="pointer-events-auto absolute left-3 bottom-[232px] flex flex-col items-center gap-1">
-                <button
-                  onClick={() => setShowReporte(true)}
-                  aria-label={`Reportar incidente en el mapa. Hay ${reportes.length} reportes visibles.`}
-                  title="Reportar incidente"
-                  className="relative w-12 h-12 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-white dark:border-slate-700 shadow-[0_8px_24px_rgba(220,38,38,0.25)] flex items-center justify-center text-[#DC2626] hover:scale-105 active:scale-95 transition-transform"
-                >
-                  <TriangleAlert size={22} />
-                  {reportes.length > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-[#DC2626] text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
-                      {reportes.length}
-                    </span>
-                  )}
-                </button>
-                <span className="rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-white dark:border-slate-700 shadow px-2 py-0.5 text-[10px] font-bold text-heading dark:text-white">
-                  Reportar
-                </span>
-              </div>
-            )}
 
             {/* Pin central fijo (modo selección de destino o de reporte) */}
             {!rutaActiva && (seleccionandoDestino || selReporte) && (
@@ -1995,155 +1964,174 @@ export default function Usuario() {
               </div>
             )}
 
-            {/* Fila inferior: SOS + acción central (se oculta en modos de selección) */}
-            {!seleccionandoDestino && !selReporte && (
-            <div className="pointer-events-auto absolute inset-x-3 bottom-4 mb-[88px] flex items-end gap-3">
-              {/* Card flotante de emergencia. Móvil: compacta y a la derecha; con ruta
-                  activa se oculta (la tarjeta de ruta ya trae su botón SOS).
-                  Escritorio (md+): tarjeta grande a la izquierda, como antes. */}
-              <div
-                className={`${rutaActiva ? 'hidden md:flex' : 'flex'} order-last md:order-first flex-col items-center gap-1 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 p-1.5 md:px-2.5 md:py-2.5 shadow-[0_8px_28px_rgba(220,38,38,0.18)] shrink-0`}
-              >
-                <span className="relative flex items-center justify-center">
-                  <span className="sos-ring absolute w-12 h-12 md:w-[72px] md:h-[72px] rounded-full bg-[#DC2626]/25" style={{ animationDuration: '2.5s' }} aria-hidden />
-                  <span className="sos-ring absolute w-12 h-12 md:w-[72px] md:h-[72px] rounded-full bg-[#DC2626]/20" style={{ animationDuration: '2.5s', animationDelay: '0.8s' }} aria-hidden />
-                  <button
-                    onClick={activarSOS}
-                    aria-label="Botón de pánico SOS. Un solo toque, sin confirmación."
-                    className="relative w-12 h-12 md:w-[72px] md:h-[72px] rounded-full bg-sos text-white border-2 md:border-[3px] border-white/70 shadow-[0_8px_24px_rgba(220,38,38,0.45)] flex flex-col items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-                  >
-                    <span className="text-[13px] md:text-[19px] font-bold leading-none tracking-widest">SOS</span>
-                  </button>
-                </span>
-                <span className="hidden md:block text-[10px] font-bold uppercase tracking-[0.12em] text-sos">
-                  Emergencia
-                </span>
+            {/* ── Zona inferior (pulgar): controles del mapa + una sola barra de acción.
+                El mapa termina donde empieza la navbar, así que basta un margen de 16 px. ── */}
+            <div className="absolute inset-x-0 bottom-0 px-4 pb-4 flex flex-col items-stretch gap-3">
+              {/* Controles del mapa: siempre por encima de la barra, nunca tapados */}
+              <div className="pointer-events-auto self-end flex flex-col rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 shadow-[0_6px_24px_rgba(0,0,0,0.35)] overflow-hidden">
+                <button
+                  onClick={zoomIn}
+                  disabled={!mapaListo}
+                  aria-label="Acercar"
+                  title={mapaListo ? 'Acercar' : 'Mapa cargando…'}
+                  className="w-11 h-11 flex items-center justify-center text-white hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
+                >
+                  <Plus size={18} />
+                </button>
+                <span className="h-px bg-white/10" aria-hidden />
+                <button
+                  onClick={zoomOut}
+                  disabled={!mapaListo}
+                  aria-label="Alejar"
+                  title={mapaListo ? 'Alejar' : 'Mapa cargando…'}
+                  className="w-11 h-11 flex items-center justify-center text-white hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
+                >
+                  <Minus size={18} />
+                </button>
+                <span className="h-px bg-white/10" aria-hidden />
+                <button
+                  onClick={centrarme}
+                  disabled={!mapaListo}
+                  aria-label="Centrar en mi ubicación"
+                  title={mapaListo ? 'Centrar en mi ubicación' : 'Mapa cargando…'}
+                  className="w-11 h-11 flex items-center justify-center text-[#60A5FA] hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
+                >
+                  <LocateFixed size={18} />
+                </button>
               </div>
 
-              {/* Centro inferior: iniciar o ruta activa */}
-              <div className="flex-1 min-w-0 flex justify-center">
-                {!rutaActiva ? (
-                  acomp?.estado === 'PENDIENTE' ? null : <button
-                    onClick={abrirRuta}
-                    className="btn-primary w-full max-w-[340px] py-3.5 text-[15px] !rounded-2xl"
-                  >
-                    <Play size={18} /> Iniciar Ruta Segura
-                  </button>
-                ) : (
-                  <div className="w-full max-w-[420px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-line dark:border-slate-700 shadow-[0_8px_28px_rgba(37,99,235,0.18)] p-3.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-[#ECFDF5] dark:bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-[#059669] dark:text-emerald-300">
-                        <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#10B981] animate-pulse" />
-                        <span className="truncate">Operador conectado</span>
-                      </span>
-                      <button
-                        onClick={activarSOS}
-                        aria-label="Botón de pánico SOS. Un solo toque, sin confirmación."
-                        className="h-8 shrink-0 rounded-full bg-sos px-3 text-[11px] font-bold tracking-wider text-white shadow-[0_4px_12px_rgba(220,38,38,0.4)] hover:scale-105 active:scale-95 transition-transform"
-                      >
-                        SOS
-                      </button>
-                    </div>
-                    <p className="mt-2 text-[14px] font-bold text-heading dark:text-white leading-snug">
-                      Tu viaje está siendo monitoreado
-                    </p>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] leading-snug text-muted dark:text-slate-400 tabular-nums">
-                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                        <Clock3 size={13} className="text-[#2563EB]" />
-                        {elapsedTxt}
-                      </span>
-                      {distanciaKm && <span className="whitespace-nowrap">· {distanciaKm} km</span>}
-                      {etaHora && <span className="whitespace-nowrap">· llegada ~{etaHora}</span>}
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => abrirChat(true)}
-                        className="btn-primary relative flex-[7] min-w-0 whitespace-nowrap py-2.5 text-[13px]"
-                      >
-                        <MessageCircle size={16} /> Hablar con operador
-                        {noLeidos > 0 && (
-                          <span
-                            className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-sos text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-slate-900"
-                            aria-label={`${noLeidos} mensajes sin leer`}
-                          >
-                            {noLeidos}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        onClick={terminarRuta}
-                        className="flex-[3] min-w-0 rounded-[10px] border border-line dark:border-slate-700 px-2 py-2.5 text-[13px] font-semibold text-muted dark:text-slate-300 hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
-                      >
-                        Finalizar
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            )}
-
-            {/* Barra del modo "ubicar reporte": confirmar vuelve al modal con las coords */}
-            {!rutaActiva && selReporte && (
-              <div className="pointer-events-auto absolute inset-x-3 bottom-4 mb-[88px] mx-auto max-w-[420px] rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border border-white dark:border-slate-700 shadow-lg p-3">
-                <p className="text-center text-[12px] font-medium text-muted dark:text-slate-400 leading-snug">
-                  Arrastra el mapa para ubicar el reporte bajo el pin
-                </p>
-                {centroRep && (
-                  <p className="mt-0.5 text-center text-[11px] text-faint dark:text-slate-500 tabular-nums">
-                    {centroRep.lat.toFixed(5)}, {centroRep.lng.toFixed(5)}
+              {/* Modo "ubicar reporte": confirmar vuelve al modal con las coords */}
+              {!rutaActiva && selReporte ? (
+                <div className="pointer-events-auto w-full max-w-[440px] mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.45)] p-3">
+                  <p className="text-center text-[13px] font-medium text-slate-300 leading-snug">
+                    Arrastra el mapa para ubicar el reporte bajo el pin
                   </p>
-                )}
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={cancelarSelectorReporte}
-                    className="btn-secondary flex-1 py-3 text-[14px]"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={confirmarUbicacionReporte}
-                    disabled={!centroRep && !mapObj.current}
-                    className="btn-primary flex-[2] py-3 text-[14px] !bg-sos hover:!bg-[#B91C1C] disabled:opacity-50"
-                  >
-                    <MapPin size={16} />
-                    Confirmar ubicación
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Banner sutil + acciones del modo selección (abajo, no tapa el zoom) */}
-            {!rutaActiva && seleccionandoDestino && (
-              <div className="pointer-events-auto absolute inset-x-3 bottom-4 mb-[88px] mx-auto max-w-[420px] rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border border-white dark:border-slate-700 shadow-lg p-3">
-                <p className="text-center text-[12px] font-medium text-muted dark:text-slate-400 leading-snug">
-                  Arrastra el mapa para fijar tu destino bajo el pin
-                </p>
-                {centroMapa && (
-                  <p className="mt-0.5 text-center text-[11px] text-faint dark:text-slate-500 tabular-nums">
-                    {centroMapa.lat.toFixed(5)}, {centroMapa.lng.toFixed(5)}
-                  </p>
-                )}
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => setModoMapa('explorar')}
-                    className="btn-secondary flex-1 py-3 text-[14px]"
-                  >
-                    Cancelar
-                  </button>
-                  {centroMovido && (
-                    <button
-                      onClick={confirmarCentro}
-                      disabled={!centroMapa || previewCargando}
-                      className="btn-primary flex-[2] py-3 text-[14px] disabled:opacity-50"
-                    >
-                      <Navigation size={16} />
-                      {previewCargando ? 'Buscando…' : 'Confirmar Destino'}
-                    </button>
+                  {centroRep && (
+                    <p className="mt-0.5 text-center text-[11px] text-slate-500 tabular-nums">
+                      {centroRep.lat.toFixed(5)}, {centroRep.lng.toFixed(5)}
+                    </p>
                   )}
+                  <div className="mt-2.5 flex gap-2">
+                    <button
+                      onClick={cancelarSelectorReporte}
+                      className="flex-1 h-12 rounded-xl border border-white/15 text-[14px] font-semibold text-slate-200 hover:bg-white/10 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmarUbicacionReporte}
+                      disabled={!centroRep && !mapObj.current}
+                      className="flex-[2] h-12 rounded-xl bg-[#F59E0B] hover:bg-amber-400 text-slate-950 text-[14px] font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+                    >
+                      <MapPin size={16} />
+                      Confirmar ubicación
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : !rutaActiva && seleccionandoDestino ? (
+                /* Modo "elegir destino en el mapa" (se entra desde el modal de ruta) */
+                <div className="pointer-events-auto w-full max-w-[440px] mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.45)] p-3">
+                  <p className="text-center text-[13px] font-medium text-slate-300 leading-snug">
+                    Arrastra el mapa para fijar tu destino bajo el pin
+                  </p>
+                  {centroMapa && (
+                    <p className="mt-0.5 text-center text-[11px] text-slate-500 tabular-nums">
+                      {centroMapa.lat.toFixed(5)}, {centroMapa.lng.toFixed(5)}
+                    </p>
+                  )}
+                  <div className="mt-2.5 flex gap-2">
+                    <button
+                      onClick={cancelarSeleccion}
+                      className="flex-1 h-12 rounded-xl border border-white/15 text-[14px] font-semibold text-slate-200 hover:bg-white/10 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    {centroMovido && (
+                      <button
+                        onClick={confirmarCentro}
+                        disabled={!centroMapa || previewCargando}
+                        className="flex-[2] h-12 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[14px] font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+                      >
+                        <Navigation size={16} />
+                        {previewCargando ? 'Buscando…' : 'Confirmar Destino'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Solicitud enviada: detalles y acciones, encima de la barra */}
+                  {acomp?.estado === 'PENDIENTE' && (
+                    <div className="pointer-events-auto">
+                      <BuscandoOperador
+                        destino={acomp.destino}
+                        cancelando={cancelandoAcomp}
+                        onCancelar={cancelarSolicitud}
+                        onChat={() => abrirChat(true)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Barra flotante única: Ruta (izquierda) + SOS (derecha, pulgar) */}
+                  <div className="pointer-events-auto w-full max-w-[440px] mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+                    {!rutaActiva ? (
+                      <div className="flex items-center gap-2 p-2 pl-3">
+                        <div className="flex-1 min-w-0">
+                          <BotonIniciarRuta
+                            onClick={abrirRuta}
+                            buscando={solicitandoRuta || acomp?.estado === 'PENDIENTE'}
+                          />
+                        </div>
+                        <BotonSOS abierta={sos.abierta} onActivar={() => void activarSOS()} />
+                      </div>
+                    ) : (
+                      <div className="p-3.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                            <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#10B981] animate-pulse" />
+                            <span className="truncate">Operador conectado</span>
+                          </span>
+                          <BotonSOS size="sm" abierta={sos.abierta} onActivar={() => void activarSOS()} />
+                        </div>
+                        <p className="mt-1 text-[15px] font-bold text-white leading-snug">
+                          Tu viaje está siendo monitoreado
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] leading-snug text-slate-400 tabular-nums">
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <Clock3 size={13} className="text-[#60A5FA]" />
+                            {elapsedTxt}
+                          </span>
+                          {distanciaKm && <span className="whitespace-nowrap">· {distanciaKm} km</span>}
+                          {etaHora && <span className="whitespace-nowrap">· llegada ~{etaHora}</span>}
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => abrirChat(true)}
+                            className="relative flex-[7] min-w-0 h-12 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[14px] font-bold flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
+                          >
+                            <MessageCircle size={16} /> Hablar con operador
+                            {noLeidos > 0 && (
+                              <span
+                                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-sos text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-slate-900"
+                                aria-label={`${noLeidos} mensajes sin leer`}
+                              >
+                                {noLeidos}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            onClick={terminarRuta}
+                            className="flex-[3] min-w-0 h-12 rounded-xl border border-white/15 px-2 text-[14px] font-semibold text-slate-200 hover:bg-white/10 transition-colors"
+                          >
+                            Finalizar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -2180,6 +2168,30 @@ export default function Usuario() {
                     </div>
                   </section>
                   <StatsRuta elapsed={elapsedTxt} conRuta={!!rutaActiva} acc={acc} nContactos={contactos.length} />
+                  {/* Tema y cerrar sesión: fuera del header para despejarlo */}
+                  <button
+                    onClick={toggleTheme}
+                    aria-pressed={esOscuro}
+                    className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                      {esOscuro ? <Sun size={19} /> : <Moon size={19} />}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[14px] font-semibold text-heading dark:text-white">Modo oscuro</span>
+                      <span className="block text-[12px] text-muted dark:text-slate-400">
+                        {esOscuro ? 'Activado' : 'Desactivado'}
+                      </span>
+                    </span>
+                    <span
+                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${esOscuro ? 'bg-brand-600' : 'bg-line dark:bg-slate-700'}`}
+                      aria-hidden
+                    >
+                      <span
+                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${esOscuro ? 'left-[22px]' : 'left-0.5'}`}
+                      />
+                    </span>
+                  </button>
                   <button
                     onClick={() => signOut()}
                     className="btn-secondary w-full py-3 text-[14px]"
@@ -2228,6 +2240,10 @@ export default function Usuario() {
           onDestinoChange={onDestinoChange}
           onElegir={elegirSug}
           onCerrar={() => setShowRuta(false)}
+          onElegirEnMapa={() => {
+            setShowRuta(false)
+            iniciarSeleccionEnMapa()
+          }}
           onConfirmar={confirmarRuta}
         />
       )}
@@ -2258,16 +2274,19 @@ export default function Usuario() {
         />
       )}
 
-      {acomp?.estado === 'PENDIENTE' && (
-        <BuscandoOperador
-          destino={acomp.destino}
-          cancelando={cancelandoAcomp}
-          onCancelar={cancelarSolicitud}
-          onChat={() => abrirChat(true)}
+      {showSosModal && (
+        <ModalSOS
+          estado={estadoModalSos}
+          sinUbicacion={gpsEstado !== 'ok'}
+          cancelando={cancelandoSos}
+          onEntendido={() => {
+            setShowSosModal(false)
+            setSosError(false)
+          }}
+          onCancelar={() => void cancelarSOS()}
+          onReintentar={() => void activarSOS()}
         />
       )}
-
-      {showSosModal && <ModalSOS onEntendido={() => setShowSosModal(false)} onCancelar={() => { setAlerta(false); setShowSosModal(false) }} />}
 
       {aviso && (
         <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 bg-heading text-white rounded-full px-5 py-2.5 text-[13px] shadow-lg flex items-center gap-2 whitespace-nowrap max-w-[calc(100vw-2rem)] overflow-hidden">
