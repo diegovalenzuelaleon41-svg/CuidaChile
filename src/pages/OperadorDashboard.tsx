@@ -32,10 +32,14 @@ import {
 import Logo from '../components/Logo'
 import MapaOperador from '../components/operador/MapaOperador'
 import ChatCiudadano, { type MotivoSinChat } from '../components/operador/ChatCiudadano'
-import { useChatAcompanamiento } from '../hooks/useChatAcompanamiento'
+import { useChat } from '../hooks/useChatAcompanamiento'
 import { useAuth } from '../auth/AuthContext'
 import { useAcompanamientosOperador, useSeguimientoAcompanamiento } from '../hooks/useAcompanamientosOperador'
 import { useAlertasSOSOperador } from '../hooks/useAlertasSOSOperador'
+import { useSesionLlamada } from '../hooks/useSesionLlamada'
+import { useLlamadaVoz } from '../hooks/useLlamadaVoz'
+import ControlesLlamada from '../components/llamada/ControlesLlamada'
+import { supabase } from '../lib/supabase'
 import type { Acompanamiento } from '../lib/acompanamientos'
 import type { AlertaSOS } from '../lib/alertas'
 import {
@@ -278,6 +282,77 @@ export default function OperadorDashboard() {
   })
   const idsSOS = new Set(sos.lista.map((a) => a.id))
 
+  /* ── Llamada de voz (LiveKit) ──
+     Ligada a una alerta (no a la selección): cambiar de tarjeta no corta la llamada. */
+  const [llamadaAlertaId, setLlamadaAlertaId] = useState<string | null>(null)
+  const { sesion: sesionLlamada, recargar: recargarLlamada } = useSesionLlamada(llamadaAlertaId)
+  const voz = useLlamadaVoz(sesionLlamada, 'el ciudadano')
+  const enLlamada = voz.fase !== 'inactiva' && voz.fase !== 'error'
+  const alertaLlamada = sos.lista.find((a) => a.id === llamadaAlertaId) ?? null
+  // Tras aceptar, entrar a la sala apenas llegue la sesión 'connecting'.
+  const autoConectarRef = useRef<string | null>(null)
+  const conectarVoz = voz.conectar
+  useEffect(() => {
+    if (!sesionLlamada || autoConectarRef.current !== sesionLlamada.incident_id) return
+    if (sesionLlamada.status !== 'connecting' || voz.fase !== 'inactiva') return
+    autoConectarRef.current = null
+    void conectarVoz()
+  }, [sesionLlamada, voz.fase, conectarVoz])
+  // La alerta salió de la bandeja (descartada/cancelada): se suelta el panel.
+  useEffect(() => {
+    if (llamadaAlertaId && !sos.cargando && !sos.lista.some((a) => a.id === llamadaAlertaId) && !enLlamada) {
+      setLlamadaAlertaId(null)
+    }
+  }, [llamadaAlertaId, sos.lista, sos.cargando, enLlamada])
+
+  /**
+   * Toma la alerta y su llamada en UNA operación atómica (aceptar_llamada):
+   * si otro operador se adelantó, falla sin asignar nada. Devuelve error o null.
+   */
+  const aceptarSOSConLlamada = async (alertaId: string): Promise<string | null> => {
+    const { data: pendiente } = await supabase
+      .from('call_sessions')
+      .select('id')
+      .eq('incident_id', alertaId)
+      .eq('status', 'pending')
+      .maybeSingle()
+    if (pendiente) {
+      const { error } = await supabase.rpc('aceptar_llamada', { p_call_id: pendiente.id })
+      if (error) {
+        console.error('[llamada] no se pudo aceptar:', error.code, error.message)
+        void sos.recargar()
+        return error.hint === 'llamada_tomada'
+          ? 'Otro operador ya tomó esta alerta.'
+          : 'No se pudo aceptar la alerta.'
+      }
+    } else {
+      // Alerta sin sesión pendiente (p. ej. anterior a las llamadas): se atiende y se abre una llamada.
+      const error = await sos.atender(alertaId)
+      if (error) return error
+      const { error: errLlamada } = await supabase.rpc('nueva_llamada', { p_alerta_id: alertaId })
+      if (errLlamada) console.error('[llamada] no se pudo abrir la llamada:', errLlamada.code)
+    }
+    void sos.recargar()
+    return null
+  }
+
+  /** Abre (o reabre) la llamada de voz con el ciudadano de una alerta que ya atiendo. */
+  const llamarPorVoz = async (alertaId: string) => {
+    if (enLlamada && llamadaAlertaId !== alertaId) {
+      setAviso('Termina la llamada en curso antes de iniciar otra.')
+      return
+    }
+    const { error } = await supabase.rpc('nueva_llamada', { p_alerta_id: alertaId })
+    if (error) {
+      console.error('[llamada] no se pudo iniciar:', error.code, error.message)
+      setAviso('No se pudo iniciar la llamada.')
+      return
+    }
+    autoConectarRef.current = alertaId
+    setLlamadaAlertaId(alertaId)
+    void recargarLlamada()
+  }
+
   /* ── Acompañamientos reales (Realtime) ── */
   const acomp = useAcompanamientosOperador(user?.id)
   const idsReales = new Set(acomp.lista.map((a) => a.id))
@@ -337,13 +412,20 @@ export default function OperadorDashboard() {
 
   const manejarAccion = async (alerta: Alerta) => {
     if (idsSOS.has(alerta.id)) {
-      const error = await sos.atender(alerta.id)
+      if (enLlamada && llamadaAlertaId !== alerta.id) {
+        setAviso('Termina la llamada en curso antes de atender otra alerta.')
+        return
+      }
+      const error = await aceptarSOSConLlamada(alerta.id)
       if (error) {
         setAviso(error)
         return
       }
       setSeleccionId(alerta.id)
-      setAviso(`Atendiendo SOS de ${alerta.nombre}.`)
+      // Al atender se entra a la llamada de voz automáticamente.
+      autoConectarRef.current = alerta.id
+      setLlamadaAlertaId(alerta.id)
+      setAviso(`Atendiendo SOS de ${alerta.nombre}. Conectando llamada…`)
       return
     }
     if (!idsReales.has(alerta.id)) {
@@ -405,14 +487,15 @@ export default function OperadorDashboard() {
     // Un acompañamiento o SOS real se cierra solo después de tomarlo.
     ((esAcompanamientoReal || esSOSReal) && alertaSeleccionada.estado !== 'EN_PROCESO')
 
-  /* ── Chat con el ciudadano (solo acompañamientos reales ya aceptados) ── */
+  /* ── Chat con el ciudadano (acompañamientos y SOS reales ya tomados) ──
+     En un SOS es el plan B cuando la llamada de voz falla. */
   const [panelDerecho, setPanelDerecho] = useState<'bitacora' | 'chat'>('bitacora')
-  const esReal = !!alertaSeleccionada && idsReales.has(alertaSeleccionada.id)
+  const esReal = !!alertaSeleccionada && (idsReales.has(alertaSeleccionada.id) || esSOSReal)
   const chatId =
     esReal && (alertaSeleccionada.estado === 'EN_PROCESO' || alertaSeleccionada.estado === 'RESUELTA')
       ? alertaSeleccionada.id
       : null
-  const chat = useChatAcompanamiento(chatId, 'operador')
+  const chat = useChat(esSOSReal ? 'alerta_id' : 'acompanamiento_id', chatId, 'operador')
   const sinChat: MotivoSinChat | null = !alertaSeleccionada
     ? 'sin-seleccion'
     : !esReal
@@ -648,10 +731,45 @@ export default function OperadorDashboard() {
 
         {/* ── 4. Columna Derecha (25%) - Acciones y Bitácora ── */}
         <aside className="w-1/4 border-l border-slate-800/60 bg-slate-950/30 backdrop-blur-md flex flex-col overflow-hidden">
+          {/* Llamada de voz con el ciudadano (SOS) */}
+          {llamadaAlertaId && (
+            <div className="px-5 pt-5 shrink-0">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                Llamada · {alertaLlamada?.usuario_nombre ?? 'Ciudadano'}
+              </h3>
+              <ControlesLlamada
+                voz={voz}
+                estadoSesion={sesionLlamada?.status}
+                nombreOtro={alertaLlamada?.usuario_nombre ?? 'el ciudadano'}
+                textoConectar="Conectar audio"
+                tono="oscuro"
+                onVolverALlamar={
+                  alertaLlamada?.estado === 'en_atencion' ? () => void llamarPorVoz(alertaLlamada.id) : undefined
+                }
+              />
+            </div>
+          )}
+
           {/* Acciones Rápidas (Arriba) */}
           <div className="p-5 shrink-0">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Acciones rápidas</h3>
             <div className="space-y-2.5">
+              {/* SOS propio en atención sin llamada abierta en este panel: llamar por voz */}
+              {sel && esSOSReal && sel.estado === 'EN_PROCESO' && llamadaAlertaId !== sel.id && (
+                <button
+                  type="button"
+                  onClick={() => void llamarPorVoz(sel.id)}
+                  disabled={enLlamada}
+                  title={enLlamada ? 'Ya hay una llamada en curso' : undefined}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Phone size={16} strokeWidth={2} />
+                    Llamada de voz con {sel.nombre}
+                  </span>
+                  <ChevronRight size={14} className="text-emerald-400/70" />
+                </button>
+              )}
               {[
                 { icono: <Phone size={16} strokeWidth={2} />, texto: 'Llamar contacto de confianza' },
                 { icono: <HardHat size={16} strokeWidth={2} />, texto: 'Derivar a Carabineros' },

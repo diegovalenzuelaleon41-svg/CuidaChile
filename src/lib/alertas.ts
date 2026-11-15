@@ -17,6 +17,8 @@ export interface AlertaSOS {
   /** Copiados desde perfil por un trigger al insertar (el operador no lee perfil). */
   usuario_nombre: string | null
   usuario_telefono: string | null
+  /** Primer nombre del operador asignado (lo pone un trigger; el ciudadano no lee perfil ajeno). */
+  operador_nombre: string | null
   creada_en: string
   atendida_en: string | null
   cerrada_en: string | null

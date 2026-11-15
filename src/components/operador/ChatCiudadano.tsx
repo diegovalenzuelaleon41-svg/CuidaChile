@@ -24,8 +24,8 @@ interface Props {
 
 const VACIOS: Record<MotivoSinChat, { titulo: string; detalle: string }> = {
   'sin-seleccion': { titulo: 'Selecciona una alerta para chatear', detalle: 'La conversación con el ciudadano aparecerá aquí.' },
-  'no-disponible': { titulo: 'Chat no disponible', detalle: 'Por ahora el chat funciona con los acompañamientos de Ruta Segura.' },
-  pendiente: { titulo: 'Acepta el monitoreo para chatear', detalle: 'Verás los mensajes que el ciudadano ya te haya escrito.' },
+  'no-disponible': { titulo: 'Chat no disponible', detalle: 'El chat funciona con las alertas SOS y los acompañamientos de Ruta Segura.' },
+  pendiente: { titulo: 'Toma la alerta para chatear', detalle: 'Verás los mensajes que el ciudadano ya te haya escrito.' },
 }
 
 /** Chat del operador con el ciudadano (columna derecha, estilo Dark Control Room). */

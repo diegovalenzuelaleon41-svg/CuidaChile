@@ -155,5 +155,5 @@ export function useAlertasSOSOperador(operadorId: string | undefined, avisos: Av
     [operadorId],
   )
 
-  return { lista, cargando, error, atender, resolver, descartar }
+  return { lista, cargando, error, atender, resolver, descartar, recargar: cargar }
 }

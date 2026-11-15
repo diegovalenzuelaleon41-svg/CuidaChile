@@ -25,15 +25,20 @@ import StatsRuta from '../components/usuario/StatsRuta'
 import CirculoLista from '../components/usuario/CirculoLista'
 import HistorialLista from '../components/usuario/HistorialLista'
 import ChatConOperador from '../components/usuario/ChatConOperador'
-import { useChatAcompanamiento } from '../hooks/useChatAcompanamiento'
+import { useChat, useChatAcompanamiento } from '../hooks/useChatAcompanamiento'
 import BuscandoOperador from '../components/usuario/BuscandoOperador'
 import BotonSOS from '../components/usuario/BotonSOS'
 import BotonIniciarRuta from '../components/usuario/BotonIniciarRuta'
 import BotonReportar from '../components/usuario/BotonReportar'
 import { useAcompanamiento } from '../hooks/useAcompanamiento'
 import { useSOS } from '../hooks/useSOS'
+import { useSesionLlamada } from '../hooks/useSesionLlamada'
+import { useLlamadaVoz } from '../hooks/useLlamadaVoz'
+import { formatoDuracion } from '../lib/llamadas'
 import type { Acompanamiento } from '../lib/acompanamientos'
-import { ModalRuta, ModalContacto, ModalSOS, ModalReporte, type EstadoModalSOS, type FormContacto, type FormReporte } from '../components/usuario/Modales'
+import { ModalRuta, ModalContacto, ModalReporte, type FormContacto, type FormReporte } from '../components/usuario/Modales'
+import PantallaSOS, { type EstadoPantallaSOS } from '../components/usuario/PantallaSOS'
+import { useLinterna, useSirena } from '../hooks/useAutoproteccion'
 
 // Reporte comunitario: pin visible 6 h; a las 2 h se atenúa a amarillo.
 interface Reporte {
@@ -249,6 +254,24 @@ export default function Usuario() {
   const [solicitandoRuta, setSolicitandoRuta] = useState(false)
   // SOS real (tabla alertas + Realtime): mismo GPS real que el acompañamiento.
   const sos = useSOS(user?.id, () => gpsRealRef.current)
+  // Llamada de voz con la central (LiveKit), ligada al SOS abierto.
+  const { sesion: sesionLlamada } = useSesionLlamada(sos.alerta?.id ?? null)
+  const voz = useLlamadaVoz(sesionLlamada)
+  const enLlamada = voz.fase !== 'inactiva' && voz.fase !== 'error'
+  // Plan B si la voz falla: chat de la alerta SOS con el operador.
+  const chatSOS = useChat('alerta_id', sos.alerta?.id ?? null, 'usuario')
+  const [showChatSOS, setShowChatSOS] = useState(false)
+  const [vistosSOS, setVistosSOS] = useState<{ id: string | null; n: number }>({ id: null, n: 0 })
+  const mensajesOperadorSOS = chatSOS.mensajes.filter((m) => m.emisor_rol === 'operador').length
+  const noLeidosSOS =
+    showChatSOS || !sos.alerta ? 0 : mensajesOperadorSOS - (vistosSOS.id === sos.alerta.id ? vistosSOS.n : 0)
+  function abrirChatSOS(abrir: boolean) {
+    setShowChatSOS(abrir)
+    setVistosSOS({ id: sos.alerta?.id ?? null, n: mensajesOperadorSOS })
+  }
+  // Autoprotección: viven aquí (no en la pantalla) para seguir activas si se oculta.
+  const sirena = useSirena()
+  const linterna = useLinterna()
   const [sosError, setSosError] = useState(false)
   const [cancelandoSos, setCancelandoSos] = useState(false)
   // Chat real con el operador de la central (tabla mensajes + Realtime).
@@ -1125,6 +1148,9 @@ export default function Usuario() {
       return
     }
     setShowSosModal(false)
+    setShowChatSOS(false)
+    sirena.detener()
+    linterna.apagar()
     setAviso('Alerta SOS cancelada.')
   }
 
@@ -1144,14 +1170,34 @@ export default function Usuario() {
   // La central cerró la alerta: avisar y volver al estado normal.
   const estadoSos = sos.alerta?.estado
   const limpiarSos = sos.limpiar
+  const detenerSirena = sirena.detener
+  const apagarLinterna = linterna.apagar
   useEffect(() => {
     if (estadoSos !== 'resuelta' && estadoSos !== 'descartada' && estadoSos !== 'cancelada') return
     setShowSosModal(false)
+    setShowChatSOS(false)
+    detenerSirena()
+    apagarLinterna()
     setAviso(estadoSos === 'resuelta' ? 'La central cerró tu alerta SOS.' : 'Tu alerta SOS fue cerrada.')
     limpiarSos()
-  }, [estadoSos, limpiarSos])
+  }, [estadoSos, limpiarSos, detenerSirena, apagarLinterna])
 
-  const estadoModalSos: EstadoModalSOS = sosError
+  // Llamada entrante (un operador aceptó): se muestra el modal con "Contestar".
+  // El micrófono recién se pide al contestar, nunca antes.
+  const llamadaAvisadaRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!sesionLlamada || sesionLlamada.status !== 'connecting' || voz.fase !== 'inactiva') return
+    if (llamadaAvisadaRef.current === sesionLlamada.id) return
+    llamadaAvisadaRef.current = sesionLlamada.id
+    setShowSosModal(true)
+    try {
+      navigator.vibrate?.([300, 150, 300, 150, 300])
+    } catch {
+      /* sin vibración */
+    }
+  }, [sesionLlamada, voz.fase])
+
+  const estadoPantallaSos: EstadoPantallaSOS = sosError
     ? 'error'
     : sos.enviando || !sos.alerta
       ? 'enviando'
@@ -2060,6 +2106,31 @@ export default function Usuario() {
                 </div>
               ) : (
                 <>
+                  {/* Llamada con la central en curso y modal cerrado: volver a ella */}
+                  {!showSosModal && sos.abierta && !(enLlamada || sesionLlamada?.status === 'connecting') && (
+                    <button
+                      onClick={() => setShowSosModal(true)}
+                      className="pointer-events-auto w-full max-w-[440px] mx-auto h-12 rounded-2xl bg-red-600 text-white text-[14px] font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse" aria-hidden />
+                      SOS activo{sirena.activa ? ' · Sirena encendida' : ''}
+                      {noLeidosSOS > 0 ? ` · ${noLeidosSOS} mensaje${noLeidosSOS > 1 ? 's' : ''}` : ''} · Abrir
+                    </button>
+                  )}
+                  {!showSosModal && (enLlamada || sesionLlamada?.status === 'connecting') && (
+                    <button
+                      onClick={() => setShowSosModal(true)}
+                      className="pointer-events-auto w-full max-w-[440px] mx-auto h-12 rounded-2xl bg-emerald-600 text-white text-[14px] font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.5)]"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse" aria-hidden />
+                      {voz.fase === 'conectada'
+                        ? `En llamada con la central${voz.duracion != null ? ` · ${formatoDuracion(voz.duracion)}` : ''}`
+                        : voz.fase === 'inactiva'
+                          ? 'La central te está llamando · Contestar'
+                          : 'Llamada con la central'}
+                    </button>
+                  )}
+
                   {/* Solicitud enviada: detalles y acciones, encima de la barra */}
                   {acomp?.estado === 'PENDIENTE' && (
                     <div className="pointer-events-auto">
@@ -2275,16 +2346,36 @@ export default function Usuario() {
       )}
 
       {showSosModal && (
-        <ModalSOS
-          estado={estadoModalSos}
+        <PantallaSOS
+          estado={estadoPantallaSos}
+          operadorNombre={sos.alerta?.operador_nombre ?? null}
           sinUbicacion={gpsEstado !== 'ok'}
+          llamada={sesionLlamada && sesionLlamada.status !== 'pending' ? { estado: sesionLlamada.status, voz } : null}
+          chatNoLeidos={noLeidosSOS}
+          sirena={sirena}
+          linterna={linterna}
           cancelando={cancelandoSos}
-          onEntendido={() => {
+          onAbrirChat={() => abrirChatSOS(true)}
+          onReintentarEnvio={() => void activarSOS()}
+          onOcultar={() => {
             setShowSosModal(false)
             setSosError(false)
           }}
           onCancelar={() => void cancelarSOS()}
-          onReintentar={() => void activarSOS()}
+        />
+      )}
+
+      {/* Chat de la alerta SOS (plan B cuando la voz falla), por encima de la pantalla SOS */}
+      {sos.alerta && (
+        <ChatConOperador
+          abierto={showChatSOS}
+          onCerrar={() => abrirChatSOS(false)}
+          estado={sos.alerta.estado === 'en_atencion' ? 'EN_CURSO' : 'PENDIENTE'}
+          mensajes={chatSOS.mensajes}
+          cargando={chatSOS.cargando}
+          error={chatSOS.error}
+          onEnviar={chatSOS.enviar}
+          sobreSOS
         />
       )}
 

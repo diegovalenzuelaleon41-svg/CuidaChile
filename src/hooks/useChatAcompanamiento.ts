@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { MAX_MENSAJE, type MensajeChat } from '../lib/acompanamientos'
 
-const COLUMNAS = 'id, acompanamiento_id, emisor_id, emisor_rol, contenido, creado_en'
+const COLUMNAS = 'id, acompanamiento_id, alerta_id, emisor_id, emisor_rol, contenido, creado_en'
+
+/** A qué pertenece el chat: una Ruta Segura o una alerta SOS. */
+export type CampoChat = 'acompanamiento_id' | 'alerta_id'
 
 function ordenar(lista: MensajeChat[]) {
   return [...lista].sort((a, b) => a.creado_en.localeCompare(b.creado_en))
@@ -15,15 +18,22 @@ function unir(a: MensajeChat[], b: MensajeChat[]) {
   return ordenar([...porId.values()])
 }
 
+/** Chat de un acompañamiento (Ruta Segura). */
+export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usuario' | 'operador') {
+  return useChat('acompanamiento_id', acompanamientoId, rol)
+}
+
 /**
- * Chat en tiempo real de un acompañamiento (usuario ↔ operador asignado).
- *  · Carga el historial y escucha los INSERT de ese acompañamiento por Realtime.
+ * Chat en tiempo real usuario ↔ operador asignado, de una ruta o de un SOS.
+ *  · Carga el historial y escucha los INSERT de ese chat por Realtime.
  *  · enviar() inserta con el rol de quien escribe; RLS valida que sea un
- *    involucrado y que la ruta siga abierta.
+ *    involucrado y que la ruta / alerta siga abierta.
  * Pasar null como id para no cargar nada.
  */
-export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usuario' | 'operador') {
-  // La lista va atada al id: al cambiar de acompañamiento no se ve la anterior.
+export function useChat(campo: CampoChat, chatId: string | null, rol: 'usuario' | 'operador') {
+  // La clave incluye el campo: un id de ruta y uno de alerta nunca se mezclan.
+  const clave = chatId ? `${campo}:${chatId}` : null
+  // La lista va atada a la clave: al cambiar de chat no se ve el anterior.
   const [estado, setEstado] = useState<{ id: string | null; lista: MensajeChat[]; listo: boolean }>({
     id: null,
     lista: [],
@@ -32,8 +42,8 @@ export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usu
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!acompanamientoId) return
-    const id = acompanamientoId
+    if (!clave || !chatId) return
+    const id = clave
     let vivo = true
 
     const agregar = (nuevos: MensajeChat[], listo?: boolean) =>
@@ -47,7 +57,7 @@ export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usu
       const { data, error } = await supabase
         .from('mensajes')
         .select(COLUMNAS)
-        .eq('acompanamiento_id', id)
+        .eq(campo, chatId)
         .order('creado_en', { ascending: true })
       if (!vivo) return
       if (error) {
@@ -65,10 +75,10 @@ export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usu
     void cargar()
 
     const canal = supabase
-      .channel(`chat-${id}`)
+      .channel(`chat-${campo}-${chatId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `acompanamiento_id=eq.${id}` },
+        { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `${campo}=eq.${chatId}` },
         (payload) => agregar([payload.new as MensajeChat]),
       )
       .subscribe((status) => {
@@ -80,17 +90,17 @@ export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usu
       vivo = false
       supabase.removeChannel(canal)
     }
-  }, [acompanamientoId])
+  }, [clave, campo, chatId])
 
   /** Envía un mensaje. Devuelve un mensaje de error o null. */
   const enviar = useCallback(
     async (texto: string): Promise<string | null> => {
       const contenido = texto.trim()
-      if (!contenido || !acompanamientoId) return null
+      if (!contenido || !clave || !chatId) return null
       if (contenido.length > MAX_MENSAJE) return `El mensaje supera los ${MAX_MENSAJE} caracteres.`
       const { data, error } = await supabase
         .from('mensajes')
-        .insert({ acompanamiento_id: acompanamientoId, emisor_rol: rol, contenido })
+        .insert({ [campo]: chatId, emisor_rol: rol, contenido })
         .select(COLUMNAS)
         .single()
       if (error) {
@@ -100,16 +110,16 @@ export function useChatAcompanamiento(acompanamientoId: string | null, rol: 'usu
           : 'No se pudo enviar el mensaje. Revisa tu conexión.'
       }
       const nuevo = data as MensajeChat
-      setEstado((prev) => (prev.id === nuevo.acompanamiento_id ? { ...prev, lista: unir(prev.lista, [nuevo]) } : prev))
+      setEstado((prev) => (prev.id === clave ? { ...prev, lista: unir(prev.lista, [nuevo]) } : prev))
       return null
     },
-    [acompanamientoId, rol],
+    [clave, campo, chatId, rol],
   )
 
-  const actual = acompanamientoId && estado.id === acompanamientoId
+  const actual = clave && estado.id === clave
   return {
     mensajes: actual ? estado.lista : [],
-    cargando: !!acompanamientoId && !(actual && estado.listo),
+    cargando: !!clave && !(actual && estado.listo),
     error,
     enviar,
   }

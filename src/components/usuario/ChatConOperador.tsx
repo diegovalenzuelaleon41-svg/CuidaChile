@@ -15,13 +15,15 @@ interface Props {
   error: string | null
   /** Devuelve un mensaje de error o null. */
   onEnviar: (texto: string) => Promise<string | null>
+  /** Se abre desde la pantalla SOS (pantalla completa): va por encima de ella. */
+  sobreSOS?: boolean
 }
 
 /**
  * Chat real con el operador de la central (panel deslizable desde abajo).
  * Los mensajes viven en Supabase (tabla mensajes) y llegan por Realtime.
  */
-export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, cargando, error, onEnviar }: Props) {
+export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, cargando, error, onEnviar, sobreSOS = false }: Props) {
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null)
@@ -68,7 +70,9 @@ export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, c
     <div
       role="dialog"
       aria-label="Chat con la central"
-      className="fixed inset-x-0 bottom-20 z-50 px-3 sm:left-4 sm:right-auto sm:px-0"
+      className={`fixed inset-x-0 px-3 sm:left-4 sm:right-auto sm:px-0 ${
+        sobreSOS ? 'bottom-[max(1rem,env(safe-area-inset-bottom))] z-[70]' : 'bottom-20 z-50'
+      }`}
     >
       <div className="card mx-auto flex h-[min(60vh,520px)] w-full max-w-md flex-col overflow-hidden sm:w-[380px]">
         {/* Header */}

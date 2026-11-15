@@ -31,10 +31,11 @@ export interface Acompanamiento {
   actualizado_en: string
 }
 
-/** Mensaje del chat usuario ↔ operador (tabla public.mensajes). */
+/** Mensaje del chat usuario ↔ operador (tabla public.mensajes): de una ruta o de un SOS. */
 export interface MensajeChat {
   id: string
-  acompanamiento_id: string
+  acompanamiento_id: string | null
+  alerta_id: string | null
   emisor_id: string | null
   emisor_rol: 'usuario' | 'operador' | 'sistema'
   contenido: string
