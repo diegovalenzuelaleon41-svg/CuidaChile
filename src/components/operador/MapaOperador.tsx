@@ -33,6 +33,8 @@ export interface PuntoMapa {
   senalPerdidaSeg?: number | null
   /** Para el tooltip y el lector de pantalla de los pines de la bandeja. */
   nombre?: string
+  /** Barrial: reportes agrupados en este punto (≤ 200 m). > 1 muestra un contador. */
+  cantidad?: number
 }
 
 export interface RutaMapa {
@@ -51,12 +53,24 @@ interface Props {
   margenInferior?: number
 }
 
+/** Contador de reportes agrupados, arriba a la derecha del pin. */
+function agregarContador(cuerpo: HTMLElement, cantidad: number | undefined, color: string) {
+  if (!cantidad || cantidad < 2) return
+  const badge = document.createElement('div')
+  badge.textContent = String(cantidad)
+  badge.style.cssText =
+    'position:absolute;top:-11px;right:-13px;min-width:20px;height:20px;padding:0 5px;border-radius:9999px;' +
+    `background:#0F172A;border:2px solid ${color};color:#FFFFFF;font:800 11px/16px system-ui,sans-serif;` +
+    `text-align:center;box-shadow:0 0 10px ${color}AA;`
+  cuerpo.appendChild(badge)
+}
+
 /**
  * Pin neón. MapLibre posiciona el elemento EXTERNO con transform/position
  * absolute: todo el estilo y las animaciones van en hijos, si no el pin
  * se sale de su coordenada (o queda fuera del canvas).
  */
-function crearPin(tipo: AlertaTipo, enVivo: boolean) {
+function crearPin(tipo: AlertaTipo, enVivo: boolean, cantidad?: number) {
   const color = NEON[tipo]
   const el = document.createElement('div')
   el.style.width = '26px'
@@ -87,6 +101,7 @@ function crearPin(tipo: AlertaTipo, enVivo: boolean) {
       'position:absolute;top:50%;left:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:9999px;background:#FFFFFF;'
     el.appendChild(centro)
   }
+  agregarContador(el, cantidad, color)
   return el
 }
 
@@ -125,6 +140,8 @@ function crearPinBandeja(p: PuntoMapa, onClick: () => void) {
     `position:absolute;inset:0;border-radius:9999px;background:${color};` +
     `border:2px solid #FFFFFF;box-shadow:0 0 10px ${color},0 0 20px ${color}88;`
   cuerpo.appendChild(punto)
+  agregarContador(cuerpo, p.cantidad, color)
+  el.dataset.cantidad = String(p.cantidad ?? 1)
   return el
 }
 
@@ -248,6 +265,7 @@ export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ru
   const selId = seleccion?.id
   const selTipo = seleccion?.tipo
   const selVivo = !!seleccion?.enVivo
+  const selCantidad = seleccion?.cantidad
   const conUbicacion = !!seleccion && !seleccion.sinUbicacion
   const seleccionRef = useRef(seleccion)
   const margenRef = useRef(margenInferior)
@@ -258,12 +276,16 @@ export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ru
     rutaRef.current = ruta
     margenRef.current = margenInferior
   })
+  const ultimoVueloRef = useRef<string | undefined>(undefined)
   useEffect(() => {
     if (markerRef.current) quitarMarker(markerRef.current)
     markerRef.current = null
     const map = mapRef.current
     const sel = seleccionRef.current
-    if (!map || !listo || !sel || !selTipo) return
+    if (!map || !listo || !sel || !selTipo) {
+      ultimoVueloRef.current = undefined
+      return
+    }
     if (!conUbicacion) {
       // Sin GPS del ciudadano todavía: centrar en el punto medio de su ruta.
       const r = rutaRef.current
@@ -273,13 +295,17 @@ export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ru
       }
       return
     }
-    const el = crearPin(selTipo, selVivo)
+    const el = crearPin(selTipo, selVivo, selCantidad)
     el.style.zIndex = '2' // sobre los pines de la bandeja
     markerRef.current = new maplibregl.Marker({ element: el })
       .setLngLat([sel.lng, sel.lat])
       .addTo(map)
-    map.flyTo({ center: [sel.lng, sel.lat], zoom: ZOOM_ALERTA, duration: 900, padding: { top: 0, right: 0, left: 0, bottom: margenRef.current } })
-  }, [selId, selTipo, selVivo, conUbicacion, listo])
+    // Solo al cambiar de selección: si llega otro reporte al grupo, se actualiza el contador sin mover la cámara.
+    if (ultimoVueloRef.current !== selId) {
+      ultimoVueloRef.current = selId
+      map.flyTo({ center: [sel.lng, sel.lat], zoom: ZOOM_ALERTA, duration: 900, padding: { top: 0, right: 0, left: 0, bottom: margenRef.current } })
+    }
+  }, [selId, selTipo, selVivo, selCantidad, conUbicacion, listo])
 
   // ── 2b. Señal perdida: pin al 50 % ("fantasma"), sin pulso de "en vivo" ──
   const fantasma = seleccion?.senalPerdidaSeg != null
@@ -313,7 +339,7 @@ export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ru
     onSeleccionarRef.current = onSeleccionar
   })
   const conGps = puntos.filter((p) => !p.sinUbicacion)
-  const bandejaKey = conGps.map((p) => `${p.id}|${p.lat}|${p.lng}|${p.senalPerdidaSeg != null}`).join(';')
+  const bandejaKey = conGps.map((p) => `${p.id}|${p.lat}|${p.lng}|${p.senalPerdidaSeg != null}|${p.cantidad ?? 1}`).join(';')
   useEffect(() => {
     const map = mapRef.current
     if (!map || !listo) return
@@ -329,6 +355,12 @@ export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ru
     })
     for (const p of visibles) {
       let m = bandeja.get(p.id)
+      // Cambió el contador del grupo: el pin se rehace (es HTML estático).
+      if (m && m.getElement().dataset.cantidad !== String(p.cantidad ?? 1)) {
+        quitarMarker(m)
+        bandeja.delete(p.id)
+        m = undefined
+      }
       if (!m) {
         m = new maplibregl.Marker({ element: crearPinBandeja(p, () => onSeleccionarRef.current?.(p.id)) })
           .setLngLat([p.lng, p.lat])

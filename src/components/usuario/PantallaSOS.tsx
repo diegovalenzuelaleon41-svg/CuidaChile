@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   Flashlight,
@@ -18,6 +18,7 @@ import {
 import type { useLlamadaVoz } from '../../hooks/useLlamadaVoz'
 import type { useLinterna, useSirena } from '../../hooks/useAutoproteccion'
 import { formatoDuracion, type EstadoLlamada } from '../../lib/llamadas'
+import { ModalPinCancelarSOS } from './PinSeguridad'
 
 /** enviando → activa (esperando operador) → en_atencion; error si no llegó a la central. */
 export type EstadoPantallaSOS = 'enviando' | 'activa' | 'en_atencion' | 'error'
@@ -38,8 +39,8 @@ interface Props {
   onReintentarEnvio: () => void
   /** Oculta la pantalla (la alerta sigue activa) o la cierra si hubo error. */
   onOcultar: () => void
-  /** Ya confirmado por el usuario. */
-  onCancelar: () => void
+  /** Cancela con el PIN de seguridad. Devuelve un mensaje de error o null. */
+  onCancelar: (pin: string) => Promise<string | null>
 }
 
 function capitalizar(nombre: string) {
@@ -49,7 +50,7 @@ function capitalizar(nombre: string) {
 /**
  * Pantalla de SOS activo, pensada para el pánico: fondo oscuro (no fatiga),
  * una sola acción principal según el estado, autoprotección (sirena y
- * linterna) y las salidas (133 y cancelar con confirmación).
+ * linterna) y las salidas (133 y cancelar con el PIN de seguridad).
  */
 export default function PantallaSOS({
   estado,
@@ -226,11 +227,12 @@ export default function PantallaSOS({
       </div>
 
       {confirmando && (
-        <ConfirmarCancelacion
+        <ModalPinCancelarSOS
           onMantener={() => setConfirmando(false)}
-          onCancelar={() => {
-            setConfirmando(false)
-            onCancelar()
+          onVerificar={async (pin) => {
+            const error = await onCancelar(pin)
+            if (!error) setConfirmando(false)
+            return error
           }}
         />
       )}
@@ -484,49 +486,6 @@ function BotonHerramienta({
         {children}
       </button>
       <span className="text-[13px] font-semibold text-slate-300">{etiqueta}</span>
-    </div>
-  )
-}
-
-/* ──────────────── Confirmación de "estoy a salvo" ──────────────── */
-
-function ConfirmarCancelacion({ onMantener, onCancelar }: { onMantener: () => void; onCancelar: () => void }) {
-  const mantenerRef = useRef<HTMLButtonElement | null>(null)
-  // Foco en "mantener": un toque accidental no cancela la alerta.
-  useEffect(() => mantenerRef.current?.focus(), [])
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center" onClick={onMantener}>
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="cancelar-titulo"
-        aria-describedby="cancelar-detalle"
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-t-3xl border border-slate-800 bg-slate-900 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:rounded-3xl"
-      >
-        <h3 id="cancelar-titulo" className="text-[22px] font-bold text-white">
-          ¿Estás a salvo?
-        </h3>
-        <p id="cancelar-detalle" className="mt-2 text-[15px] leading-snug text-slate-300">
-          Si cancelas, la central dejará de atender tu alerta y se cortará la llamada. Si sigues en peligro, no la canceles.
-        </p>
-        <button
-          ref={mantenerRef}
-          type="button"
-          onClick={onMantener}
-          className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-blue-600 text-[17px] font-bold text-white hover:bg-blue-500"
-        >
-          No, mantener la alerta
-        </button>
-        <button
-          type="button"
-          onClick={onCancelar}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl border border-slate-700 text-[15px] font-semibold text-slate-200 hover:bg-slate-800"
-        >
-          Sí, estoy a salvo
-        </button>
-      </div>
     </div>
   )
 }

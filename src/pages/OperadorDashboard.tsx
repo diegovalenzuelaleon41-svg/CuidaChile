@@ -2,9 +2,9 @@
  * Panel de Operador — Centro de Comando (Fase 2), estilo "Dark Control Room".
  *
  * Dashboard desktop-first, sin scroll general (h-screen).
- * Tres columnas + header superior. SOS (tabla alertas) y acompañamientos
- * (tabla acompanamientos) son reales vía Supabase Realtime; Barrial sigue
- * siendo mock.
+ * Tres columnas + header superior. SOS (tabla alertas), acompañamientos
+ * (tabla acompanamientos) y Barrial (tabla reportes, agrupados por zona)
+ * son reales vía Supabase Realtime.
  *
  * Ruta: /operador/dashboard
  */
@@ -33,6 +33,8 @@ import {
   History,
   ContactRound,
   CircleCheck,
+  EyeOff,
+  Layers,
 } from 'lucide-react'
 import Logo from '../components/Logo'
 import MapaOperador from '../components/operador/MapaOperador'
@@ -55,15 +57,10 @@ import ControlesLlamada from '../components/llamada/ControlesLlamada'
 import { supabase } from '../lib/supabase'
 import type { Acompanamiento } from '../lib/acompanamientos'
 import type { AlertaSOS } from '../lib/alertas'
-import {
-  MOCK_ALERTAS,
-  COLOR_NEON,
-  MOTIVOS_DESCARTE,
-  filtrarPorTipo,
-  ahoraHHMM,
-  type Alerta,
-  type AlertaTipo,
-} from '../lib/mockAlerts'
+import { COLOR_NEON, MOTIVOS_DESCARTE, filtrarPorTipo, type Alerta, type AlertaTipo } from '../lib/mockAlerts'
+import { useReportesOperador } from '../hooks/useReportesOperador'
+import { ETIQUETA_CATEGORIA, agruparReportes, type ReporteOperador } from '../lib/reportes'
+import { BotonAudio, MiniaturaFoto } from '../components/operador/EvidenciaReporte'
 
 type TabId = AlertaTipo | 'TODAS'
 
@@ -146,18 +143,6 @@ function estadoClases(estado: Alerta['estado']) {
     : estado === 'EN_PROCESO'
       ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
       : 'bg-slate-700/60 text-slate-300 border-slate-600'
-}
-
-/** Texto que queda en la bitácora al presionar el botón de acción. */
-function btnAccionTexto(tipo: AlertaTipo): string {
-  switch (tipo) {
-    case 'SOS':
-      return 'atendió la alerta SOS'
-    case 'BARRIAL':
-      return 'validó la alerta barrial'
-    case 'ACOMPANAMIENTO':
-      return 'aceptó el acompañamiento'
-  }
 }
 
 /* ──────────────────── Acompañamientos reales → tarjetas ──────────────────── */
@@ -256,6 +241,43 @@ function sosAAlerta(a: AlertaSOS): Alerta {
     estado: a.estado === 'activa' ? 'PENDIENTE' : a.estado === 'en_atencion' ? 'EN_PROCESO' : 'RESUELTA',
     usuarioId: a.usuario_id,
     timeline,
+  }
+}
+
+/* ──────────────────── Reportes barriales reales → tarjetas ──────────────────── */
+
+/**
+ * Un grupo de reportes cercanos = una tarjeta. El id es el del primer reporte
+ * (estable aunque lleguen más a la zona); el contenido, el del más reciente.
+ */
+function grupoBarrialAAlerta(grupo: ReporteOperador[]): Alerta {
+  const r = grupo[grupo.length - 1]
+  const recientes = [...grupo].reverse()
+  return {
+    id: grupo[0].id,
+    tipo: 'BARRIAL',
+    // Anónimo: el nombre no llega (el servidor no lo copia) y no se muestra.
+    nombre: r.es_anonimo ? 'Vecino anónimo' : (r.usuario_nombre ?? 'Vecino CuidaChile'),
+    telefono: '',
+    hora: horaDe(r.creado_en),
+    lat: r.lat,
+    lng: r.lng,
+    descripcion: r.descripcion ?? undefined,
+    creadoEn: r.creado_en,
+    estado: 'PENDIENTE',
+    timeline: grupo.map((g) => `${horaDe(g.creado_en)} - Reporte recibido: ${ETIQUETA_CATEGORIA[g.categoria]}`),
+    barrial: {
+      categoria: ETIQUETA_CATEGORIA[r.categoria],
+      anonimo: r.es_anonimo,
+      ids: grupo.map((g) => g.id),
+      fotos: recientes.flatMap((g) => (g.evidencia_url ? [g.evidencia_url] : [])),
+      audios: recientes.flatMap((g) => (g.audio_url ? [g.audio_url] : [])),
+      otras: recientes.slice(1).map((g) => ({
+        hora: horaDe(g.creado_en),
+        descripcion: g.descripcion,
+        categoria: ETIQUETA_CATEGORIA[g.categoria],
+      })),
+    },
   }
 }
 
@@ -397,29 +419,27 @@ export default function OperadorDashboard() {
   const acomp = useAcompanamientosOperador(user?.id)
   const idsReales = new Set(acomp.lista.map((a) => a.id))
 
-  /* ── Escalamientos a supervisor (reales en Supabase; Barrial es mock) ── */
+  /* ── Reportes barriales reales (Realtime), agrupados a ≤ 200 m ── */
+  const reportes = useReportesOperador(user?.id)
+
+  /* ── Escalamientos a supervisor (SOS y acompañamientos) ── */
   const escalamientos = useEscalamientos(
     sos.lista.map((a) => a.id),
     acomp.lista.map((a) => a.id),
   )
-  const [escaladasMock, setEscaladasMock] = useState<Record<string, { motivo: string; en: string }>>({})
   const conEscalada = (a: Alerta): Alerta => {
     const real = escalamientos.porId[a.id]
-    const escalada = real ? { motivo: textoMotivoEscalamiento(real.motivo), en: real.creado_en } : escaladasMock[a.id]
-    return escalada ? { ...a, escalada } : a
+    return real ? { ...a, escalada: { motivo: textoMotivoEscalamiento(real.motivo), en: real.creado_en } } : a
   }
   const [porEscalar, setPorEscalar] = useState<Alerta | null>(null)
 
   /* ── Estado ── */
-  // Mock solo para Barrial: SOS y acompañamientos vienen de Supabase.
-  const [alertasMock, setAlertasMock] = useState<Alerta[]>(() =>
-    MOCK_ALERTAS.map((a) => ({ ...a, timeline: [...a.timeline] }))
-  )
-  // Las descartadas salen de la bandeja (las reales ya no vienen de Supabase).
+  // Las descartadas y revisadas salen de la bandeja (ya no vienen de Supabase).
   const alertas = [
     ...sos.lista.map(sosAAlerta),
     ...acomp.lista.map(acompanamientoAAlerta),
-    ...alertasMock.filter((a) => a.estado !== 'DESCARTADA'),
+    // Más recientes primero, como el resto de la bandeja.
+    ...agruparReportes(reportes.lista).map(grupoBarrialAAlerta).reverse(),
   ].map(conEscalada)
   // Alerta a la espera de confirmar el rechazo (modal).
   const [porRechazar, setPorRechazar] = useState<Alerta | null>(null)
@@ -454,15 +474,24 @@ export default function OperadorDashboard() {
 
   const alertasFiltradas = filtrarPorTipo(alertas, tabActivo)
 
-  /** Solo alertas mock (Barrial): SOS y acompañamientos se actualizan en Supabase. */
-  const actualizarAlertaMock = (id: string, estado: Alerta['estado'], accionTexto: string) => {
-    const accionCompleta = `${ahoraHHMM()} - ${accionTexto}`
-    setAlertasMock((prev) =>
-      prev.map((a) => (a.id !== id ? a : { ...a, estado, timeline: [...a.timeline, accionCompleta] })),
-    )
+  /** Barrial: validar difunde a los vecinos (y avisa al autor); actúa sobre todo el grupo. */
+  const validarBarrial = async (alerta: Alerta) => {
+    if (!alerta.barrial) return
+    const error = await reportes.revisar(alerta.barrial.ids, 'validado')
+    if (error) {
+      setAviso(error)
+      return
+    }
+    setSeleccionId((sel) => (sel === alerta.id ? null : sel))
+    const n = alerta.barrial.ids.length
+    setAviso(n > 1 ? `${n} reportes validados. Se alertó a los vecinos.` : 'Reporte validado. Se alertó a los vecinos.')
   }
 
   const manejarAccion = async (alerta: Alerta) => {
+    if (alerta.barrial) {
+      await validarBarrial(alerta)
+      return
+    }
     if (idsSOS.has(alerta.id)) {
       if (enLlamada && llamadaAlertaId !== alerta.id) {
         setAviso('Termina la llamada en curso antes de atender otra alerta.')
@@ -480,10 +509,7 @@ export default function OperadorDashboard() {
       setAviso(`Atendiendo SOS de ${alerta.nombre}. Conectando llamada…`)
       return
     }
-    if (!idsReales.has(alerta.id)) {
-      actualizarAlertaMock(alerta.id, 'EN_PROCESO', btnAccionTexto(alerta.tipo))
-      return
-    }
+    if (!idsReales.has(alerta.id)) return
     const error = await acomp.aceptar(alerta.id)
     if (error) {
       setAviso(error)
@@ -508,28 +534,28 @@ export default function OperadorDashboard() {
         setAviso(error)
         return
       }
-    } else {
-      actualizarAlertaMock(alerta.id, 'DESCARTADA', `Alerta descartada: ${motivo}`)
-    }
-    // Si estaba en el panel central, vuelve a "Sin alerta seleccionada".
-    setSeleccionId((sel) => (sel === alerta.id ? null : sel))
-    setAviso(`Alerta descartada (${motivo}).`)
-  }
-
-  const confirmarEscalamiento = async (alerta: Alerta, motivo: MotivoEscalamiento) => {
-    setPorEscalar(null)
-    if (idsSOS.has(alerta.id) || idsReales.has(alerta.id)) {
-      const caso = idsSOS.has(alerta.id) ? { alertaId: alerta.id } : { acompanamientoId: alerta.id }
-      const error = await escalamientos.escalar(caso, motivo)
+    } else if (alerta.barrial) {
+      // El autor recibe "Tu reporte fue revisado y descartado".
+      const error = await reportes.revisar(alerta.barrial.ids, 'descartado', motivo)
       if (error) {
         setAviso(error)
         return
       }
-    } else {
-      setEscaladasMock((prev) => ({
-        ...prev,
-        [alerta.id]: { motivo: textoMotivoEscalamiento(motivo), en: new Date().toISOString() },
-      }))
+    }
+    // Si estaba en el panel central, vuelve a "Sin alerta seleccionada".
+    setSeleccionId((sel) => (sel === alerta.id ? null : sel))
+    setAviso(alerta.barrial ? `Reporte descartado (${motivo}).` : `Alerta descartada (${motivo}).`)
+  }
+
+  const confirmarEscalamiento = async (alerta: Alerta, motivo: MotivoEscalamiento) => {
+    setPorEscalar(null)
+    // Solo SOS y acompañamientos se escalan (un reporte barrial se valida o descarta).
+    if (!idsSOS.has(alerta.id) && !idsReales.has(alerta.id)) return
+    const caso = idsSOS.has(alerta.id) ? { alertaId: alerta.id } : { acompanamientoId: alerta.id }
+    const error = await escalamientos.escalar(caso, motivo)
+    if (error) {
+      setAviso(error)
+      return
     }
     setAviso(`Caso escalado a supervisor (${textoMotivoEscalamiento(motivo)}).`)
   }
@@ -541,10 +567,7 @@ export default function OperadorDashboard() {
       if (error) setAviso(error)
       return
     }
-    if (!idsReales.has(alertaSeleccionada.id)) {
-      actualizarAlertaMock(alertaSeleccionada.id, 'RESUELTA', 'Alerta marcada como resuelta')
-      return
-    }
+    if (!idsReales.has(alertaSeleccionada.id)) return
     const error = await acomp.finalizar(alertaSeleccionada.id)
     if (error) setAviso(error)
   }
@@ -554,6 +577,8 @@ export default function OperadorDashboard() {
   const resolverDeshabilitado =
     !alertaSeleccionada ||
     alertaSeleccionada.estado === 'RESUELTA' ||
+    // Un reporte barrial no se "resuelve": se valida o se descarta.
+    !!alertaSeleccionada.barrial ||
     // Un acompañamiento o SOS real se cierra solo después de tomarlo.
     ((esAcompanamientoReal || esSOSReal) && alertaSeleccionada.estado !== 'EN_PROCESO')
 
@@ -664,15 +689,19 @@ export default function OperadorDashboard() {
             </div>
           </div>
 
-          {(aviso || sos.error || acomp.error) && (
+          {(aviso || sos.error || acomp.error || reportes.error) && (
             <div role="status" className="mx-3 mb-1 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              {aviso ?? sos.error ?? acomp.error}
+              {aviso ?? sos.error ?? acomp.error ?? reportes.error}
             </div>
           )}
 
           {/* Lista de tarjetas de alertas */}
           <div className="flex-1 overflow-y-auto px-3 pb-3 pt-1 space-y-3">
-            {acomp.cargando && tabActivo === 'ACOMPANAMIENTO' ? (
+            {reportes.cargando && tabActivo === 'BARRIAL' ? (
+              <div className="flex items-center justify-center h-32 gap-2 text-slate-500 text-sm">
+                <Loader2 size={16} className="animate-spin" /> Cargando reportes barriales…
+              </div>
+            ) : acomp.cargando && tabActivo === 'ACOMPANAMIENTO' ? (
               <div className="flex items-center justify-center h-32 gap-2 text-slate-500 text-sm">
                 <Loader2 size={16} className="animate-spin" /> Cargando acompañamientos…
               </div>
@@ -708,6 +737,7 @@ export default function OperadorDashboard() {
               sel && {
                 id: sel.id,
                 tipo: sel.tipo,
+                cantidad: sel.barrial?.ids.length,
                 lat: sel.lat,
                 lng: sel.lng,
                 sinUbicacion: sel.sinUbicacion,
@@ -725,7 +755,8 @@ export default function OperadorDashboard() {
                 lng: a.lng,
                 sinUbicacion: a.sinUbicacion,
                 senalPerdidaSeg: sinSenal(a),
-                nombre: a.nombre,
+                nombre: a.barrial ? `${a.barrial.categoria} · ${a.barrial.ids.length} reporte(s)` : a.nombre,
+                cantidad: a.barrial?.ids.length,
               }))}
             onSeleccionar={setSeleccionId}
             ruta={sel?.rutaCoords ?? null}
@@ -761,10 +792,13 @@ export default function OperadorDashboard() {
                       {labelPorTipo(sel.tipo)} · {estadoTexto(sel.estado)}
                       {sel.escalada && <span className="text-purple-300"> · Escalada</span>}
                     </p>
-                    <h3 className="mt-0.5 text-base font-semibold text-white">{sel.nombre}</h3>
+                    <h3 className="mt-0.5 text-base font-semibold text-white">{sel.barrial ? sel.barrial.categoria : sel.nombre}</h3>
+                    {sel.barrial && <AutorReporte alerta={sel} />}
                     {sel.descripcion && <p className="mt-1 text-sm text-slate-400">{sel.descripcion}</p>}
                   </>
                 )}
+
+                {sel.barrial && <DetalleGrupoBarrial barrial={sel.barrial} />}
 
                 {sel.ruta && (
                   <p className="mt-3 flex items-start gap-2.5 text-sm leading-snug text-slate-300">
@@ -794,6 +828,25 @@ export default function OperadorDashboard() {
 
                 {sel.usuarioId && <ContextoCiudadanoPanel usuarioId={sel.usuarioId} />}
 
+                {sel.barrial ? (
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPorRechazar(sel)}
+                      className="flex-1 py-3 rounded-xl border border-slate-600 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                    >
+                      Descartar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void validarBarrial(sel)}
+                      className="flex-[2] flex items-center justify-center gap-2 py-3 rounded-xl text-[15px] font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.45)] transition-all"
+                    >
+                      <CircleCheck size={17} strokeWidth={2.25} />
+                      {sel.barrial.ids.length > 1 ? `Validar ${sel.barrial.ids.length} reportes` : 'Validar y difundir'}
+                    </button>
+                  </div>
+                ) : (
                 <button
                   type="button"
                   onClick={() => {
@@ -805,6 +858,7 @@ export default function OperadorDashboard() {
                 >
                   <Phone size={17} strokeWidth={2} /> Llamar al ciudadano
                 </button>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900/90 backdrop-blur-lg px-5 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
@@ -1075,7 +1129,11 @@ function ConfirmarRechazo({
           ¿Estás seguro de que deseas rechazar esta alerta?
         </h2>
         <p id="rechazo-detalle" className="mt-1 text-sm text-slate-400">
-          {labelPorTipo(alerta.tipo)} · {alerta.nombre}. Saldrá de la bandeja.
+          {alerta.barrial
+            ? `${alerta.barrial.categoria}. ${
+                alerta.barrial.ids.length > 1 ? `Se descartarán los ${alerta.barrial.ids.length} reportes de la zona` : 'Saldrá de la bandeja'
+              } y se avisará a quien reportó.`
+            : `${labelPorTipo(alerta.tipo)} · ${alerta.nombre}. Saldrá de la bandeja.`}
         </p>
 
         <fieldset className="mt-4">
@@ -1220,9 +1278,10 @@ function AlertaCard({
             </span>
           )}
 
-          <h4 className="text-sm font-bold text-white truncate">{alerta.nombre}</h4>
+          <h4 className="text-sm font-bold text-white truncate">{alerta.barrial ? alerta.barrial.categoria : alerta.nombre}</h4>
+          {alerta.barrial && <AutorReporte alerta={alerta} />}
           <p className="text-[12px] text-slate-400 mt-0.5 truncate">
-            {alerta.hora} · {esAcomp ? `Ruta: ${alerta.ruta}` : alerta.descripcion || 'Alerta recibida'}
+            {alerta.hora} · {esAcomp ? `Ruta: ${alerta.ruta}` : alerta.descripcion || (alerta.barrial ? 'Sin descripción' : 'Alerta recibida')}
           </p>
         </div>
 
@@ -1238,10 +1297,23 @@ function AlertaCard({
               yaProcesado ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : accion.clases
             }`}
           >
-            {accion.texto}
+            {alerta.barrial && alerta.barrial.ids.length > 1 ? `${accion.texto} (${alerta.barrial.ids.length})` : accion.texto}
           </button>
         )}
       </div>
+
+      {alerta.barrial && (alerta.barrial.ids.length > 1 || alerta.barrial.fotos.length > 0 || alerta.barrial.audios.length > 0) && (
+        <div className="flex items-center gap-2">
+          {alerta.barrial.fotos[0] && <MiniaturaFoto ruta={alerta.barrial.fotos[0]} />}
+          {alerta.barrial.audios[0] && <BotonAudio ruta={alerta.barrial.audios[0]} />}
+          {alerta.barrial.ids.length > 1 && (
+            <span className="flex min-w-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold leading-tight text-amber-300">
+              <Layers size={12} className="shrink-0" />
+              {alerta.barrial.ids.length} reportes similares en esta zona
+            </span>
+          )}
+        </div>
+      )}
 
       {esAcomp && (
         <>
@@ -1294,6 +1366,52 @@ function AlertaCard({
         </>
       )}
     </div>
+  )
+}
+
+/* ──────────────────── Reporte barrial: autor y detalle del grupo ──────────────────── */
+
+/** Quién reportó; si es anónimo, solo el badge gris (el nombre nunca llega). */
+function AutorReporte({ alerta }: { alerta: Alerta }) {
+  if (alerta.barrial?.anonimo) {
+    return (
+      <span className="mt-1 inline-flex items-center gap-1 rounded-md border border-slate-600 bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+        <EyeOff size={11} /> Anónimo
+      </span>
+    )
+  }
+  return <p className="mt-0.5 truncate text-[11px] text-slate-500">Reportado por {alerta.nombre}</p>
+}
+
+/** Tarjeta flotante: evidencia de todo el grupo y los otros reportes de la zona. */
+function DetalleGrupoBarrial({ barrial }: { barrial: NonNullable<Alerta['barrial']> }) {
+  return (
+    <>
+      {(barrial.fotos.length > 0 || barrial.audios.length > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {barrial.fotos.slice(0, 3).map((f) => (
+            <MiniaturaFoto key={f} ruta={f} tam="grande" />
+          ))}
+          {barrial.audios.map((a, i) => (
+            <BotonAudio key={a} ruta={a} conTexto={barrial.audios.length === 1 || i === 0} />
+          ))}
+        </div>
+      )}
+      {barrial.otras.length > 0 && (
+        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+            <Layers size={12} /> {barrial.ids.length} reportes similares en esta zona
+          </p>
+          <ul className="mt-1 max-h-20 space-y-0.5 overflow-y-auto">
+            {barrial.otras.map((o, i) => (
+              <li key={i} className="truncate text-xs text-slate-300">
+                <span className="tabular-nums text-slate-500">{o.hora}</span> · {o.descripcion || o.categoria}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   )
 }
 

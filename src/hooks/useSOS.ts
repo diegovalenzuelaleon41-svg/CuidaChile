@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ESTADOS_SOS_ABIERTOS, INTERVALO_GPS_SOS_MS, type AlertaSOS } from '../lib/alertas'
 import { LATIDO_GPS_MS } from '../lib/acompanamientos'
+import { mensajeRechazoPin, type VerificacionPin } from '../lib/pin'
 
 /**
  * Lado usuario del botón SOS:
@@ -137,20 +138,22 @@ export function useSOS(usuarioId: string | undefined, obtenerPos: () => [number,
     return 'No pudimos enviar tu alerta a la central.'
   }, [usuarioId, buscarAbierta])
 
-  /** El usuario cancela su alerta (activa o en atención). Devuelve un mensaje de error o null. */
-  const cancelar = useCallback(async (): Promise<string | null> => {
+  /**
+   * El usuario cancela su alerta (activa o en atención) con su PIN: el
+   * servidor lo verifica y solo cancelar_sos() puede pasarla a 'cancelada'.
+   * Devuelve un mensaje de error (PIN incorrecto, bloqueo, red) o null.
+   */
+  const cancelar = useCallback(async (pin: string): Promise<string | null> => {
     if (!id) return null
-    const { data, error } = await supabase
-      .from('alertas')
-      .update({ estado: 'cancelada' })
-      .eq('id', id)
-      .in('estado', ESTADOS_SOS_ABIERTOS)
-      .select('*')
+    const { data, error } = await supabase.rpc('cancelar_sos', { p_alerta_id: id, p_pin: pin })
     if (error) {
       console.error('[sos] no se pudo cancelar:', error.code, error.message)
-      return 'No se pudo cancelar la alerta.'
+      return 'No se pudo cancelar la alerta. Revisa tu conexión.'
     }
-    if (data && data.length > 0) setAlerta(null)
+    const res = data as VerificacionPin
+    const rechazo = mensajeRechazoPin(res, 'sos')
+    if (rechazo) return rechazo
+    if (res.resultado === 'cancelada') setAlerta(null)
     else {
       // Ya la cerró un operador: mostrar el estado real.
       const { data: actual } = await supabase.from('alertas').select('*').eq('id', id).maybeSingle()

@@ -7,8 +7,8 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 // Sin esto el mapa falla con "Worker failed to load" y nunca dispara 'load'.
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
-  CheckCircle2, Clock3, Crosshair, LocateFixed, MapPin, MessageCircle,
-  Minus, Moon, Navigation, Plus, Search, Sun, Users, X,
+  CheckCircle2, ChevronRight, Clock3, Crosshair, KeyRound, LocateFixed, MapPin, MessageCircle,
+  Minus, Moon, Navigation, Plus, Search, ShieldCheck, Sun, Users, X,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../hooks/useTheme'
@@ -36,20 +36,31 @@ import { useSesionLlamada } from '../hooks/useSesionLlamada'
 import { useLlamadaVoz } from '../hooks/useLlamadaVoz'
 import { formatoDuracion } from '../lib/llamadas'
 import type { Acompanamiento } from '../lib/acompanamientos'
-import { ModalRuta, ModalContacto, ModalReporte, type FormContacto, type FormReporte } from '../components/usuario/Modales'
+import { ModalRuta, ModalContacto, type FormContacto } from '../components/usuario/Modales'
+import ModalReporte from '../components/usuario/ModalReporte'
+import {
+  ETIQUETA_CATEGORIA, FORM_REPORTE_VACIO, distanciaM, subirEvidencia, tipoAudio,
+  type CategoriaReporte, type EstadoReporte, type FormReporte, type GravedadReporte,
+} from '../lib/reportes'
 import PantallaSOS, { type EstadoPantallaSOS } from '../components/usuario/PantallaSOS'
 import { useLinterna, useSirena } from '../hooks/useAutoproteccion'
+import { ModalCrearPin, ModalPinPerfil } from '../components/usuario/PinSeguridad'
+import { consultarTienePin, tomarMarcaRestablecerPin } from '../lib/pin'
 
 // Reporte comunitario: pin visible 6 h; a las 2 h se atenúa a amarillo.
+// La comunidad ve los validados (reportes_publicos, sin autor); el autor
+// además ve los suyos mientras la central los revisa.
 interface Reporte {
   id: string
-  usuario_id: string
   lat: number
   lng: number
-  categoria: 'robo' | 'sospechoso' | 'accidente'
-  gravedad: 'rojo' | 'amarillo' | 'azul'
+  categoria: CategoriaReporte
+  gravedad: GravedadReporte
   descripcion: string | null
   creado_en: string
+  /** Propio: se puede borrar. */
+  propio: boolean
+  estado: EstadoReporte
 }
 
 const COLOR_GRAVEDAD: Record<Reporte['gravedad'], string> = {
@@ -58,11 +69,11 @@ const COLOR_GRAVEDAD: Record<Reporte['gravedad'], string> = {
   azul: '#2563EB',
 }
 
-const ETIQUETA_CATEGORIA: Record<Reporte['categoria'], string> = {
-  robo: 'Robo',
-  sospechoso: 'Sospechoso',
-  accidente: 'Accidente',
-}
+/** Pin gris: reporte propio que la central aún no valida (solo lo ve su autor). */
+const COLOR_EN_REVISION = '#64748B'
+
+/** Radio para avisar "alerta validada cerca de ti". */
+const RADIO_AVISO_BARRIAL_M = 1000
 
 // Orden de superposición: rojo encima de amarillo, amarillo encima de azul.
 const RANK_GRAVEDAD: Record<Reporte['gravedad'], number> = {
@@ -81,6 +92,7 @@ function opacidadReporte(creadoEn: string, ahora = Date.now()): number {
 function colorReporte(r: Reporte, ahora = Date.now()): string | null {
   const edadH = (ahora - new Date(r.creado_en).getTime()) / 3_600_000
   if (!(edadH >= 0) || edadH >= 6) return null
+  if (r.estado === 'pendiente') return COLOR_EN_REVISION
   if (edadH >= 2) return COLOR_GRAVEDAD.amarillo
   return COLOR_GRAVEDAD[r.gravedad] ?? COLOR_GRAVEDAD.amarillo
 }
@@ -193,7 +205,12 @@ export default function Usuario() {
   // Reportes comunitarios
   const [reportes, setReportes] = useState<Reporte[]>([])
   const [showReporte, setShowReporte] = useState(false)
-  const [formRep, setFormRep] = useState<FormReporte>({ categoria: '', gravedad: '', descripcion: '' })
+  // Para el canal Realtime (que no se re-suscribe en cada carga).
+  const reportesRef = useRef<Reporte[]>([])
+  reportesRef.current = reportes
+  const [formRep, setFormRep] = useState<FormReporte>(FORM_REPORTE_VACIO)
+  // Resultado de la revisión de un reporte propio (la central lo validó o descartó).
+  const [avisoReporte, setAvisoReporte] = useState<'validado' | 'descartado' | null>(null)
   const [repGuardando, setRepGuardando] = useState(false)
   // Ubicación del reporte: GPS por defecto o elegida en el mapa (pin central)
   const [reportLoc, setReportLoc] = useState<{ lat: number; lng: number } | null>(null)
@@ -274,6 +291,12 @@ export default function Usuario() {
   const linterna = useLinterna()
   const [sosError, setSosError] = useState(false)
   const [cancelandoSos, setCancelandoSos] = useState(false)
+  // PIN de seguridad: null = consultando (o sin red; no se bloquea la app por eso).
+  const [tienePin, setTienePin] = useState<boolean | null>(null)
+  // Abierto desde Perfil; 'restablecer' al volver de verificar con Google.
+  const [pinPerfil, setPinPerfil] = useState<'cambiar' | 'restablecer' | null>(() =>
+    tomarMarcaRestablecerPin() ? 'restablecer' : null,
+  )
   // Chat real con el operador de la central (tabla mensajes + Realtime).
   const chat = useChatAcompanamiento(acomp?.id ?? null, 'usuario')
   // Mensajes del operador ya vistos (se marca al abrir/cerrar el chat).
@@ -305,6 +328,17 @@ export default function Usuario() {
     })()
     return () => { vivo = false }
   }, [user])
+
+  // ¿Ya creó su PIN de seguridad? Si no, se le pide al entrar.
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    let vivo = true
+    void consultarTienePin().then((tiene) => {
+      if (vivo) setTienePin(tiene)
+    })
+    return () => { vivo = false }
+  }, [userId])
 
   // Monitor del permiso de ubicación: dice QUÉ ve el navegador
   // (granted/denied/prompt) y reintenta solo cuando cambia a granted.
@@ -723,16 +757,63 @@ export default function Usuario() {
   }, [user])
 
   // ── Reportes comunitarios: carga + refresco cada 60 s ──────────────
+  // Validados de la comunidad + los propios aún vigentes (pendientes incluidos).
   async function cargarReportes() {
+    if (!user) return
     try {
-      const { data, error } = await supabase.from('reportes')
-        .select('id,usuario_id,lat,lng,categoria,gravedad,descripcion,creado_en')
-        .gt('expira_en', new Date().toISOString())
-        .order('creado_en', { ascending: false })
-        .limit(100)
-      if (!error && data) setReportes(data as Reporte[])
+      const ahoraIso = new Date().toISOString()
+      const [pub, propios] = await Promise.all([
+        supabase.from('reportes_publicos')
+          .select('id,lat,lng,categoria,gravedad,descripcion,creado_en')
+          .gt('expira_en', ahoraIso)
+          .order('creado_en', { ascending: false })
+          .limit(100),
+        supabase.from('reportes')
+          .select('id,lat,lng,categoria,gravedad,descripcion,creado_en,estado')
+          .eq('usuario_id', user.id)
+          .neq('estado', 'descartado')
+          .gt('expira_en', ahoraIso),
+      ])
+      if (pub.error || propios.error) return
+      const mios = (propios.data ?? []).map((r) => ({ ...r, propio: true }) as Reporte)
+      const idsMios = new Set(mios.map((r) => r.id))
+      const comunidad = (pub.data ?? [])
+        .filter((r) => !idsMios.has(r.id))
+        .map((r) => ({ ...r, propio: false, estado: 'validado' }) as Reporte)
+      setReportes([...mios, ...comunidad])
     } catch { /* sin red: se conservan los ya cargados */ }
   }
+
+  /**
+   * Cierra el círculo: si la central revisó reportes propios (aunque haya
+   * sido con la app cerrada), muestra el resultado una vez y los marca vistos.
+   */
+  async function revisarAvisosReportes() {
+    if (!user) return
+    const { data, error } = await supabase.from('reportes')
+      .select('id,estado')
+      .eq('usuario_id', user.id)
+      .eq('usuario_visto', false)
+      .in('estado', ['validado', 'descartado'])
+      .order('revisado_en', { ascending: false })
+    if (error || !data || data.length === 0) return
+    setAvisoReporte(data[0].estado as 'validado' | 'descartado')
+    try {
+      navigator.vibrate?.(120)
+    } catch { /* sin vibración */ }
+    await supabase.rpc('marcar_reportes_vistos', { p_ids: data.map((r) => r.id) })
+  }
+
+  useEffect(() => {
+    if (!avisoReporte) return
+    const t = setTimeout(() => setAvisoReporte(null), 8000)
+    return () => clearTimeout(t)
+  }, [avisoReporte])
+
+  useEffect(() => {
+    void revisarAvisosReportes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   useEffect(() => {
     if (!user) return
@@ -753,8 +834,26 @@ export default function Usuario() {
     if (!user) return
     const canal = supabase
       .channel('reportes-mapa')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes' }, () => cargarReportes())
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reportes' }, () => cargarReportes())
+      // Un operador validó un reporte (o dejó de estar publicado).
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes_publicos' }, (payload) => {
+        const nuevo = payload.new as { id: string; lat: number; lng: number }
+        const yo = gpsRealRef.current
+        const esMio = reportesRef.current.some((r) => r.id === nuevo.id && r.propio)
+        if (!esMio && yo && distanciaM({ lng: yo[0], lat: yo[1] }, nuevo) <= RADIO_AVISO_BARRIAL_M) {
+          setAviso('Nueva alerta barrial validada cerca de ti.')
+        }
+        cargarReportes()
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reportes_publicos' }, () => cargarReportes())
+      // La central revisó un reporte propio: feedback al autor.
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'reportes', filter: `usuario_id=eq.${user.id}` },
+        () => {
+          void revisarAvisosReportes()
+          cargarReportes()
+        },
+      )
     try {
       canal.subscribe()
     } catch { /* realtime opcional */ }
@@ -844,6 +943,9 @@ export default function Usuario() {
       (r.descripcion
         ? `<p style="margin:4px 0 0;font-size:12px;color:${txt}">${r.descripcion.replace(/</g, '&lt;')}</p>`
         : `<p style="margin:4px 0 0;font-size:12px;color:${sub}">Reporte de la comunidad</p>`) +
+      (r.estado === 'pendiente'
+        ? `<p style="margin:6px 0 0;font-size:11px;font-weight:600;color:${sub}">⏳ En revisión por la central · solo tú lo ves</p>`
+        : ``) +
       // Borrar solo el propio: el RLS lo refuerza en el servidor.
       (esMio
         ? `<button data-eliminar-reporte="${r.id}" style="margin-top:8px;display:inline-flex;align-items:center;gap:4px;border:1px solid #FECACA;background:#FEF2F2;color:#DC2626;font-size:11px;font-weight:700;border-radius:9999px;padding:4px 10px;cursor:pointer">🗑 Eliminar</button>`
@@ -856,7 +958,7 @@ export default function Usuario() {
   function abrirPopupReporte(r: ReporteVisible) {
     const map = mapObj.current
     if (!map) return
-    const esMio = !!user && r.usuario_id === user.id
+    const esMio = r.propio
     try {
       popupRef.current?.remove()
       popupRef.current = null
@@ -1034,28 +1136,41 @@ export default function Usuario() {
 
   async function enviarReporte() {
     if (!user) return
-    if (formRep.categoria === '' || formRep.gravedad === '') {
-      setAviso('Elige categoría y gravedad para enviar el reporte.')
+    if (formRep.categoria === '') {
+      setAviso('Elige qué está pasando para enviar el reporte.')
       return
     }
     // Ubicación exacta: la elegida en el mapa o el GPS actual.
     const rl = reportLoc ?? { lat: pos[1], lng: pos[0] }
     setRepGuardando(true)
     try {
+      // El id se genera aquí para subir la evidencia a su carpeta antes del INSERT.
+      // gravedad, estado y vencimiento los fija el servidor (completar_reporte).
+      const id = crypto.randomUUID()
+      const evidenciaUrl = formRep.foto
+        ? await subirEvidencia(user.id, id, 'foto.jpg', formRep.foto, formRep.foto.type || 'image/jpeg')
+        : null
+      let audioUrl: string | null = null
+      if (formRep.audio) {
+        const { tipo, ext } = tipoAudio(formRep.audio)
+        audioUrl = await subirEvidencia(user.id, id, `audio.${ext}`, formRep.audio, tipo)
+      }
       const { error } = await supabase.from('reportes').insert({
+        id,
         usuario_id: user.id,
         lat: rl.lat,
         lng: rl.lng,
         categoria: formRep.categoria,
-        gravedad: formRep.gravedad,
         descripcion: formRep.descripcion.trim() || null,
-        expira_en: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+        es_anonimo: formRep.esAnonimo,
+        evidencia_url: evidenciaUrl,
+        audio_url: audioUrl,
       })
       if (error) throw error
-      setFormRep({ categoria: '', gravedad: '', descripcion: '' })
+      setFormRep(FORM_REPORTE_VACIO)
       setReportLoc(null)
       setShowReporte(false)
-      setAviso('Reporte enviado. Gracias por cuidar a la comunidad.')
+      setAviso('Reporte enviado. La central lo revisará.')
       // Re-render inmediato + vuelo a la zona: el pin aparece sin recargar
       // y el usuario lo ve aunque estuviera fuera de pantalla.
       cargarReportes()
@@ -1139,19 +1254,19 @@ export default function Usuario() {
     if (error) setSosError(true)
   }
 
-  async function cancelarSOS() {
+  /** Devuelve el error para mostrarlo en el modal del PIN (la alerta sigue activa). */
+  async function cancelarSOS(pin: string): Promise<string | null> {
     setCancelandoSos(true)
-    const error = await sos.cancelar()
+    const error = await sos.cancelar(pin)
     setCancelandoSos(false)
-    if (error) {
-      setAviso(error)
-      return
-    }
+    if (error) return error
     setShowSosModal(false)
     setShowChatSOS(false)
     sirena.detener()
     linterna.apagar()
+    setTab('inicio')
     setAviso('Alerta SOS cancelada.')
+    return null
   }
 
   // El header ("Alerta activa") sigue al SOS real, no a un flag local.
@@ -2264,6 +2379,21 @@ export default function Usuario() {
                     </span>
                   </button>
                   <button
+                    onClick={() => setPinPerfil('cambiar')}
+                    className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                      <KeyRound size={19} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[14px] font-semibold text-heading dark:text-white">PIN de seguridad</span>
+                      <span className="block text-[12px] text-muted dark:text-slate-400">
+                        {tienePin === false ? 'Sin crear' : 'Cambiar o restablecer'}
+                      </span>
+                    </span>
+                    <ChevronRight size={18} className="text-faint dark:text-slate-500 shrink-0" />
+                  </button>
+                  <button
                     onClick={() => signOut()}
                     className="btn-secondary w-full py-3 text-[14px]"
                   >
@@ -2363,7 +2493,7 @@ export default function Usuario() {
             setShowSosModal(false)
             setSosError(false)
           }}
-          onCancelar={() => void cancelarSOS()}
+          onCancelar={cancelarSOS}
         />
       )}
 
@@ -2381,6 +2511,66 @@ export default function Usuario() {
           onEscribiendo={chatSOS.avisarEscribiendo}
           sobreSOS
         />
+      )}
+
+      {/* Primer ingreso sin PIN: bloqueante, pero nunca encima de un SOS en curso */}
+      {tienePin === false && !showSosModal && !sos.abierta && (
+        <ModalCrearPin
+          onCreado={() => {
+            setTienePin(true)
+            setAviso('PIN de seguridad creado.')
+          }}
+        />
+      )}
+
+      {pinPerfil && tienePin !== false && (
+        <ModalPinPerfil
+          pasoInicial={pinPerfil}
+          sosAbierto={sos.abierta}
+          onCerrar={() => setPinPerfil(null)}
+          onListo={(mensaje) => {
+            setPinPerfil(null)
+            setTienePin(true)
+            setAviso(mensaje)
+          }}
+        />
+      )}
+
+      {/* Cierre del círculo: resultado de la revisión de un reporte propio */}
+      {avisoReporte && (
+        <div className="fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[45] flex justify-center px-4">
+          <div
+            role="status"
+            className={`flex w-full max-w-md items-start gap-3 rounded-2xl border p-4 text-white shadow-2xl backdrop-blur-xl ${
+              avisoReporte === 'validado' ? 'border-emerald-500/40 bg-slate-900/90' : 'border-white/10 bg-slate-900/90'
+            }`}
+          >
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                avisoReporte === 'validado' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/10 text-slate-300'
+              }`}
+              aria-hidden
+            >
+              {avisoReporte === 'validado' ? <ShieldCheck size={21} /> : <CheckCircle2 size={21} />}
+            </span>
+            <p className="min-w-0 flex-1 pt-0.5 text-[14px] font-semibold leading-snug">
+              {avisoReporte === 'validado'
+                ? 'Tu reporte fue validado. Se alertó a los vecinos.'
+                : 'Tu reporte fue revisado y descartado.'}
+              <span className="mt-0.5 block text-[12px] font-normal text-slate-400">
+                {avisoReporte === 'validado' ? 'Gracias por cuidar a tu barrio.' : 'Gracias igual: cada aviso ayuda a la central.'}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={() => setAvisoReporte(null)}
+              aria-label="Cerrar aviso"
+              className="-m-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white"
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
       )}
 
       {aviso && (

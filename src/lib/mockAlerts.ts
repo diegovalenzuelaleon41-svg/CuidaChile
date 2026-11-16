@@ -1,6 +1,6 @@
 /**
- * Tipos de las tarjetas del Dashboard del Operador y mock de alertas Barrial.
- * SOS (alertas) y acompañamientos ya son reales: se convierten a Alerta en el panel.
+ * Tipos de las tarjetas del Dashboard del Operador. SOS (alertas),
+ * acompañamientos y reportes barriales son reales: se convierten a Alerta en el panel.
  */
 
 export type AlertaTipo = 'SOS' | 'BARRIAL' | 'ACOMPANAMIENTO'
@@ -43,27 +43,24 @@ export interface Alerta {
   usuarioId?: string
   /** Escalada a supervisor: motivo legible y cuándo (ISO). */
   escalada?: { motivo: string; en: string }
+  /**
+   * Solo BARRIAL: la tarjeta representa a todos los reportes pendientes a
+   * ≤ 200 m (el más reciente es la tarjeta). Validar/descartar actúa sobre el grupo.
+   */
+  barrial?: {
+    categoria: string
+    anonimo: boolean
+    /** Ids de todos los reportes del grupo (incluido este). */
+    ids: string[]
+    /** Rutas en el bucket de evidencias, de todo el grupo. */
+    fotos: string[]
+    audios: string[]
+    /** Descripciones de los otros reportes del grupo. */
+    otras: { hora: string; descripcion: string | null; categoria: string }[]
+  }
   /** Entradas de la bitácora (timeline) asociadas a esta alerta. */
   timeline: string[]
 }
-
-/** Solo Barrial: SOS y acompañamientos ya vienen de Supabase. */
-export const MOCK_ALERTAS: Alerta[] = [
-  {
-    id: 'a3',
-    tipo: 'BARRIAL',
-    nombre: 'Vecino Barrio Italia',
-    telefono: '+56 9 2222 3333',
-    hora: '10:05',
-    lat: -33.4450,
-    lng: -70.6650,
-    descripcion: '3 personas merodeando cerca de la plaza',
-    estado: 'PENDIENTE',
-    timeline: [
-      '10:05 - Alerta barrial recibida',
-    ],
-  },
-]
 
 /** Filtra las alertas por tipo de pestaña. */
 export function filtrarPorTipo(alertas: Alerta[], tipo: AlertaTipo | 'TODAS') {
