@@ -17,13 +17,24 @@ export default function Landing() {
         <section id="inicio" className="relative isolate overflow-hidden bg-white dark:bg-[#0B1120]">
           <HeroBackdrop />
           <div className="relative mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center px-4 lg:px-8 py-12 md:py-16">
-            <div className="max-w-xl">
+            {/* isolate: el resplandor (-z-10) queda detrás del texto pero delante del fondo del hero */}
+            <div className="relative isolate max-w-xl">
+              {/* Resplandor detrás del bloque de texto: tapa el patrón del fondo y sube el contraste */}
+              <div aria-hidden className="pointer-events-none absolute -inset-x-12 -inset-y-10 -z-10">
+                <div className="absolute inset-0 rounded-[48px] bg-white/70 blur-2xl dark:bg-[#0B1120]/75" />
+                <div className="absolute inset-x-10 inset-y-6 rounded-full bg-blue-500/10 blur-3xl dark:bg-blue-600/15" />
+              </div>
               <span className="inline-flex items-center gap-2 rounded-full border border-[#BFDBFE] bg-[#EFF6FF] dark:border-slate-700 dark:bg-slate-800 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2563EB] dark:text-[#93C5FD]">
                 <ShieldCheck size={14} strokeWidth={2.25} />
                 Seguridad que te acompaña
               </span>
               <h1 className="mt-5 text-[44px] md:text-[60px] font-extrabold leading-[1.05] tracking-tight text-[#0B1E4A] dark:text-white">
-                Tu seguridad,
+                Tu{' '}
+                {/* En claro el degradado arranca más oscuro: blue-400 sobre blanco no llega al contraste mínimo */}
+                <span className="bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent dark:from-blue-400 dark:to-blue-600">
+                  seguridad
+                </span>
+                ,
                 <br />
                 <span className="text-[#2563EB] dark:text-[#60A5FA]">siempre contigo.</span>
               </h1>

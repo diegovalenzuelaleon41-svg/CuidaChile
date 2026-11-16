@@ -27,6 +27,9 @@ const ESCUDOS: [number, number, number, 'azul' | 'rojo'][] = [
   [10, 72, 38, 'rojo'],
 ]
 
+/** Trayecto de la ruta en el mapa del mockup (viewBox 300×350). La luz lo recorre con offset-path. */
+const RUTA = 'M20 300 C 70 270, 110 240, 150 200 S 230 120, 272 90'
+
 const CONTACTOS = [
   { ini: 'MP', bg: 'from-[#F472B6] to-[#DB2777]' },
   { ini: 'JR', bg: 'from-[#60A5FA] to-[#2563EB]' },
@@ -109,13 +112,20 @@ export default function FloatingPhoneMockup() {
               <img src="/img/mapa-santiago.png" alt="Mapa de Santiago con ruta activa" className="w-full h-full object-cover" />
               <svg viewBox="0 0 300 350" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden>
                 <path
-                  d="M20 300 C 70 270, 110 240, 150 200 S 230 120, 272 90"
+                  className="ruta-avance"
+                  d={RUTA}
                   fill="none"
                   stroke="#2563EB"
                   strokeWidth="4.5"
                   strokeLinecap="round"
                   strokeDasharray="0.5 10"
                 />
+                {/* Punto de luz que recorre la ruta (.ruta-luz) */}
+                <g className="ruta-luz" style={{ offsetPath: `path('${RUTA}')` }}>
+                  <circle r="10" fill="#3B82F6" opacity="0.3" />
+                  <circle r="5" fill="#60A5FA" />
+                  <circle r="2.5" fill="#FFFFFF" />
+                </g>
               </svg>
               {/* Pin pulsante */}
               <span className="absolute left-1/2 top-[57%] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
@@ -148,8 +158,7 @@ export default function FloatingPhoneMockup() {
               </div>
               {/* SOS con glow */}
               <div className="relative flex justify-center my-3">
-                <span className="sos-ring absolute w-[76px] h-[76px] rounded-full bg-[#EF4444]/30" />
-                <span className="sos-ring absolute w-[76px] h-[76px] rounded-full bg-[#EF4444]/20" style={{ animationDelay: '0.8s' }} />
+                <span className="absolute w-[76px] h-[76px] rounded-full bg-[#EF4444]/40 motion-safe:animate-ping" />
                 <div className="relative w-[76px] h-[76px] rounded-full bg-gradient-to-b from-[#F87171] to-[#DC2626] border-[3px] border-white/70 shadow-[0_0_32px_rgba(239,68,68,0.65),0_8px_24px_rgba(220,38,38,0.45)] flex flex-col items-center justify-center px-3 text-center text-white">
                   <span className="text-[20px] font-extrabold leading-[1.1] tracking-widest">SOS</span>
                   <span className="mt-0.5 text-[8px] uppercase leading-[1.1] tracking-wider opacity-90">Presionar 1.5s</span>
@@ -184,7 +193,7 @@ export default function FloatingPhoneMockup() {
       {/* ── Card 1 · arriba izquierda: estado ──────────────────────────── */}
       <div
         className="float-card hidden md:flex absolute top-[130px] left-0 lg:-left-[2%] z-20 w-[190px] lg:w-[200px] flex-col gap-2 glass-card p-4 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDelay: '0.5s' }}
+        style={{ animationDuration: '5s', animationDelay: '-0.8s' }}
       >
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#94A3B8]">Estado de protección</p>
         <div className="flex items-center gap-3">
@@ -203,7 +212,7 @@ export default function FloatingPhoneMockup() {
       {/* ── Card 2 · arriba derecha: globo azul ─────────────────────────── */}
       <div
         className="float-card hidden md:flex absolute top-0 -right-[2%] lg:-right-[4%] z-20 w-[220px] lg:w-[240px] items-start gap-2.5 rounded-2xl rounded-bl-md bg-[#2563EB]/95 backdrop-blur-md border border-white/20 p-3.5 shadow-xl shadow-[#2563EB]/30 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDelay: '1.5s' }}
+        style={{ animationDuration: '6.2s', animationDelay: '-3.1s' }}
       >
         {/* Cola del globo de texto, apuntando al teléfono */}
         <span className="absolute -bottom-2 left-4 w-4 h-4 rotate-45 rounded-sm bg-[#2563EB]/95" aria-hidden />
@@ -218,7 +227,7 @@ export default function FloatingPhoneMockup() {
       {/* ── Card 3 · abajo izquierda: tiempo de respuesta ───────────────── */}
       <div
         className="float-card hidden md:flex absolute top-[290px] -left-[2%] lg:-left-[6%] z-20 w-[180px] flex-col gap-2 glass-card p-4 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDelay: '1s' }}
+        style={{ animationDuration: '5.6s', animationDelay: '-2.2s' }}
       >
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#94A3B8]">Tiempo de respuesta</p>
         <div className="flex items-center gap-3">
@@ -235,7 +244,7 @@ export default function FloatingPhoneMockup() {
       {/* ── Card 4 · abajo derecha: círculo de confianza ────────────────── */}
       <div
         className="float-card hidden md:flex absolute bottom-[50px] lg:bottom-[60px] -right-[2%] lg:-right-[5%] z-20 w-[210px] flex-col gap-2 glass-card p-4 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDelay: '2s' }}
+        style={{ animationDuration: '6.8s', animationDelay: '-4.6s' }}
       >
         <div className="flex items-center">
           {CONTACTOS.map((c, i) => (

@@ -108,15 +108,47 @@ body * {
 @keyframes float-card {
   0%,
   100% {
-    transform: translateY(-6px);
+    transform: translateY(-8px);
   }
   50% {
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
 }
 
 .float-card {
   animation: float-card 5s ease-in-out infinite;
+}
+
+/* Ruta del mockup del hero: los puntos avanzan y una luz recorre el trayecto. */
+.ruta-avance {
+  animation: ruta-avance 0.9s linear infinite;
+}
+
+/* -10.5 = un ciclo de strokeDasharray="0.5 10": los puntos se mueven sin salto. */
+@keyframes ruta-avance {
+  to {
+    stroke-dashoffset: -10.5;
+  }
+}
+
+.ruta-luz {
+  offset-rotate: 0deg;
+  animation: ruta-luz 3.4s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+
+@keyframes ruta-luz {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
 }
 
 @keyframes pin-ripple {
@@ -255,6 +287,7 @@ button:active > .icono-alerta {
 @media (prefers-reduced-motion: reduce) {
   .float-phone,
   .float-card,
+  .ruta-avance,
   .pin-ripple,
   .pin-neon-pulso,
   .sos-ring,
@@ -265,6 +298,12 @@ button:active > .icono-alerta {
   .halo-llamada,
   .punto-escribiendo {
     animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ruta-luz {
+    display: none;
   }
 }
 
