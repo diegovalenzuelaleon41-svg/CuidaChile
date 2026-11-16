@@ -2,7 +2,7 @@
 import { ArrowRight, ShieldCheck } from 'lucide-react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import FloatingPhoneMockup from '../components/FloatingPhoneMockup'
+import HeroRender3D from '../components/landing/HeroRender3D'
 import HeroBackdrop from '../components/HeroBackdrop'
 import ComoFunciona from '../components/landing/ComoFunciona'
 import Funciones from '../components/landing/Funciones'
@@ -49,10 +49,7 @@ export default function Landing() {
               </p>
             </div>
 
-            {/* Floating phone */}
-            <div className="flex justify-center">
-              <FloatingPhoneMockup />
-            </div>
+            <HeroRender3D />
           </div>
         </section>
 
