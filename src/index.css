@@ -220,6 +220,24 @@ button:active > .icono-alerta {
   animation: destello 0.5s ease-out forwards;
 }
 
+/* "Escribiendo…": tres puntos que saltan en secuencia. */
+@keyframes punto-escribiendo {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.punto-escribiendo {
+  animation: punto-escribiendo 1.2s ease-in-out infinite;
+}
+
 /* Llamada entrante: halo que se expande desde el botón "Contestar". */
 @keyframes halo-llamada {
   0% {
@@ -244,7 +262,8 @@ button:active > .icono-alerta {
   .shimmer::before,
   .icono-alerta,
   .destello,
-  .halo-llamada {
+  .halo-llamada,
+  .punto-escribiendo {
     animation: none !important;
   }
 }

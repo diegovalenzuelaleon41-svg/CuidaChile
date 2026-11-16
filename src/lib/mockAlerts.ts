@@ -39,6 +39,10 @@ export interface Alerta {
   /** Acompañamientos reales: extremos de la ruta, [lng, lat]. */
   rutaCoords?: { origen: [number, number]; destino: [number, number] }
   estado: AlertaEstado
+  /** Casos reales: el ciudadano (para su contexto: historial y contactos). */
+  usuarioId?: string
+  /** Escalada a supervisor: motivo legible y cuándo (ISO). */
+  escalada?: { motivo: string; en: string }
   /** Entradas de la bitácora (timeline) asociadas a esta alerta. */
   timeline: string[]
 }

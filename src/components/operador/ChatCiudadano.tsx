@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Lock, MessagesSquare, Send } from 'lucide-react'
+import { HeartHandshake, Loader2, Lock, MapPin, MessagesSquare, PhoneCall, Send, Siren } from 'lucide-react'
 import { MAX_MENSAJE, type MensajeChat } from '../../lib/acompanamientos'
+import PuntosEscribiendo from '../PuntosEscribiendo'
 
 function fmtHora(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
@@ -20,7 +21,19 @@ interface Props {
   error: string | null
   /** Devuelve un mensaje de error o null. */
   onEnviar: (texto: string) => Promise<string | null>
+  /** El ciudadano está escribiendo (Realtime Broadcast). */
+  otroEscribiendo?: boolean
+  /** Avisar al ciudadano que el operador está escribiendo. */
+  onEscribiendo?: () => void
 }
+
+/** Respuestas rápidas: se insertan en el campo y el operador decide si enviar. */
+const RESPUESTAS_RAPIDAS = [
+  { icono: MapPin, texto: 'Te tengo en el mapa' },
+  { icono: Siren, texto: 'Carabineros en camino' },
+  { icono: HeartHandshake, texto: 'Mantén la calma' },
+  { icono: PhoneCall, texto: '¿Me escuchas?' },
+]
 
 const VACIOS: Record<MotivoSinChat, { titulo: string; detalle: string }> = {
   'sin-seleccion': { titulo: 'Selecciona una alerta para chatear', detalle: 'La conversación con el ciudadano aparecerá aquí.' },
@@ -29,17 +42,34 @@ const VACIOS: Record<MotivoSinChat, { titulo: string; detalle: string }> = {
 }
 
 /** Chat del operador con el ciudadano (columna derecha, estilo Dark Control Room). */
-export default function ChatCiudadano({ sinChat, puedeEscribir, nombreCiudadano, mensajes, cargando, error, onEnviar }: Props) {
+export default function ChatCiudadano({
+  sinChat,
+  puedeEscribir,
+  nombreCiudadano,
+  mensajes,
+  cargando,
+  error,
+  onEnviar,
+  otroEscribiendo = false,
+  onEscribiendo,
+}: Props) {
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null)
   const listaRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const puedeEnviar = puedeEscribir && texto.trim().length > 0 && !enviando
 
   useEffect(() => {
     const el = listaRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [mensajes.length, sinChat])
+  }, [mensajes.length, sinChat, otroEscribiendo])
+
+  /** Inserta la respuesta en el campo (no la envía): el operador revisa y presiona Enviar. */
+  function insertarRespuesta(frase: string) {
+    setTexto((prev) => (prev.trim() ? `${prev.trimEnd()} ${frase}` : frase))
+    inputRef.current?.focus()
+  }
 
   async function enviar() {
     if (!puedeEnviar) return
@@ -96,6 +126,7 @@ export default function ChatCiudadano({ sinChat, puedeEscribir, nombreCiudadano,
             )
           })
         )}
+        {otroEscribiendo && !cargando && <PuntosEscribiendo quien={nombreCiudadano ?? 'El ciudadano'} oscuro />}
       </div>
 
       {(errorEnvio || error) && (
@@ -104,9 +135,25 @@ export default function ChatCiudadano({ sinChat, puedeEscribir, nombreCiudadano,
         </p>
       )}
 
+      {puedeEscribir && (
+        <div className="mt-3 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Respuestas rápidas">
+          {RESPUESTAS_RAPIDAS.map(({ icono: Icono, texto: frase }) => (
+            <button
+              key={frase}
+              type="button"
+              onClick={() => insertarRespuesta(frase)}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-700"
+            >
+              <Icono size={13} className="text-slate-400" />
+              {frase}
+            </button>
+          ))}
+        </div>
+      )}
+
       {puedeEscribir ? (
         <form
-          className="mt-3 flex items-end gap-2"
+          className="mt-2 flex items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             void enviar()
@@ -115,10 +162,14 @@ export default function ChatCiudadano({ sinChat, puedeEscribir, nombreCiudadano,
           <label htmlFor="chat-operador-texto" className="sr-only">Mensaje para el ciudadano</label>
           <textarea
             id="chat-operador-texto"
+            ref={inputRef}
             rows={1}
             value={texto}
             maxLength={MAX_MENSAJE}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              setTexto(e.target.value)
+              onEscribiendo?.()
+            }}
             onKeyDown={(e) => {
               // Enter envía; Shift+Enter hace salto de línea.
               if (e.key === 'Enter' && !e.shiftKey) {

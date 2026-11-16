@@ -28,6 +28,11 @@ import {
   List,
   Clock3,
   UserRound,
+  ShieldAlert,
+  TriangleAlert,
+  History,
+  ContactRound,
+  CircleCheck,
 } from 'lucide-react'
 import Logo from '../components/Logo'
 import MapaOperador from '../components/operador/MapaOperador'
@@ -37,6 +42,14 @@ import { useAuth } from '../auth/AuthContext'
 import { useAcompanamientosOperador, useSeguimientoAcompanamiento } from '../hooks/useAcompanamientosOperador'
 import { useAlertasSOSOperador } from '../hooks/useAlertasSOSOperador'
 import { useSesionLlamada } from '../hooks/useSesionLlamada'
+import {
+  MOTIVOS_ESCALAMIENTO,
+  textoMotivoEscalamiento,
+  useContextoCiudadano,
+  useEscalamientos,
+  type MotivoEscalamiento,
+} from '../hooks/useCasoOperador'
+import { SENAL_PERDIDA_MS } from '../lib/acompanamientos'
 import { useLlamadaVoz } from '../hooks/useLlamadaVoz'
 import ControlesLlamada from '../components/llamada/ControlesLlamada'
 import { supabase } from '../lib/supabase'
@@ -157,7 +170,7 @@ function horaDe(iso: string) {
 }
 
 /** Alto aprox. de la tarjeta flotante: el mapa centra el pin por encima de ella. */
-const MARGEN_TARJETA_FLOTANTE = 300
+const MARGEN_TARJETA_FLOTANTE = 370
 
 /** Hora con segundos (es-CL), p. ej. "12:46:16 p. m.". */
 function horaLarga(iso: string) {
@@ -216,6 +229,7 @@ function acompanamientoAAlerta(a: Acompanamiento): Alerta {
     actualizadoEn: a.actualizado_en,
     ruta: `${a.origen} → ${a.destino}`,
     estado: a.estado === 'PENDIENTE' ? 'PENDIENTE' : a.estado === 'EN_CURSO' ? 'EN_PROCESO' : 'RESUELTA',
+    usuarioId: a.usuario_id,
     timeline,
   }
 }
@@ -240,8 +254,30 @@ function sosAAlerta(a: AlertaSOS): Alerta {
     aceptadoEn: a.atendida_en ?? undefined,
     actualizadoEn: a.actualizado_en,
     estado: a.estado === 'activa' ? 'PENDIENTE' : a.estado === 'en_atencion' ? 'EN_PROCESO' : 'RESUELTA',
+    usuarioId: a.usuario_id,
     timeline,
   }
+}
+
+/* ──────────────────── Señal perdida ──────────────────── */
+
+/**
+ * Segundos sin noticias del teléfono del ciudadano, o null si no aplica.
+ * Aplica a casos reales que deberían estar enviando GPS: un SOS abierto o un
+ * acompañamiento en curso, con ubicación previa. El teléfono reenvía su
+ * posición al menos cada 15 s aunque no se mueva, así que 45 s de silencio
+ * significan señal perdida (no "persona quieta").
+ */
+function segundosSinSenal(a: Alerta, esReal: boolean, ahora: number): number | null {
+  if (!esReal || a.sinUbicacion || !a.actualizadoEn || a.estado === 'RESUELTA') return null
+  if (a.tipo === 'ACOMPANAMIENTO' && a.estado !== 'EN_PROCESO') return null
+  const ms = ahora - Date.parse(a.actualizadoEn)
+  return ms > SENAL_PERDIDA_MS ? Math.floor(ms / 1000) : null
+}
+
+/** "52 s" / "3 min" */
+function textoDuracionCorta(seg: number) {
+  return seg < 60 ? `${seg} s` : `${Math.floor(seg / 60)} min`
 }
 
 /** Alarma corta (dos tonos) al llegar un SOS. Sin archivos de audio. */
@@ -271,12 +307,16 @@ export default function OperadorDashboard() {
 
   /* ── Aviso flotante (también lo usan los hooks en vivo) ── */
   const [aviso, setAviso] = useState<string | null>(null)
+  // Por id: la tarjeta seleccionada se recalcula con cada cambio en vivo.
+  const [seleccionId, setSeleccionId] = useState<string | null>(null)
 
   /* ── SOS reales (Realtime) ── */
   const sos = useAlertasSOSOperador(user?.id, {
     onNueva: (a) => {
       sonarAlarmaSOS()
       setAviso(`Nueva alerta SOS de ${a.usuario_nombre ?? 'un ciudadano'}.`)
+      // Sin caso abierto en pantalla: el mapa vuela al SOS. Si ya atiende otro, no se lo quitamos.
+      setSeleccionId((actual) => actual ?? a.id)
     },
     onCancelada: (a) => setAviso(`${a.usuario_nombre ?? 'El ciudadano'} canceló su alerta SOS.`),
   })
@@ -357,6 +397,19 @@ export default function OperadorDashboard() {
   const acomp = useAcompanamientosOperador(user?.id)
   const idsReales = new Set(acomp.lista.map((a) => a.id))
 
+  /* ── Escalamientos a supervisor (reales en Supabase; Barrial es mock) ── */
+  const escalamientos = useEscalamientos(
+    sos.lista.map((a) => a.id),
+    acomp.lista.map((a) => a.id),
+  )
+  const [escaladasMock, setEscaladasMock] = useState<Record<string, { motivo: string; en: string }>>({})
+  const conEscalada = (a: Alerta): Alerta => {
+    const real = escalamientos.porId[a.id]
+    const escalada = real ? { motivo: textoMotivoEscalamiento(real.motivo), en: real.creado_en } : escaladasMock[a.id]
+    return escalada ? { ...a, escalada } : a
+  }
+  const [porEscalar, setPorEscalar] = useState<Alerta | null>(null)
+
   /* ── Estado ── */
   // Mock solo para Barrial: SOS y acompañamientos vienen de Supabase.
   const [alertasMock, setAlertasMock] = useState<Alerta[]>(() =>
@@ -367,17 +420,15 @@ export default function OperadorDashboard() {
     ...sos.lista.map(sosAAlerta),
     ...acomp.lista.map(acompanamientoAAlerta),
     ...alertasMock.filter((a) => a.estado !== 'DESCARTADA'),
-  ]
+  ].map(conEscalada)
   // Alerta a la espera de confirmar el rechazo (modal).
   const [porRechazar, setPorRechazar] = useState<Alerta | null>(null)
   const [tabActivo, setTabActivo] = useState<TabId>('SOS')
-  // Por id: la tarjeta seleccionada se recalcula con cada cambio en vivo.
-  const [seleccionId, setSeleccionId] = useState<string | null>(null)
   const alertaSeleccionada = alertas.find((a) => a.id === seleccionId) ?? null
-  // Reloj para el "Tiempo" del acompañamiento seleccionado.
+  // Reloj para el "Tiempo" del acompañamiento y el contador de "señal perdida".
   const [ahora, setAhora] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setAhora(Date.now()), 30_000)
+    const t = setInterval(() => setAhora(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
 
@@ -397,6 +448,7 @@ export default function OperadorDashboard() {
   })
   /** En vivo: el acompañamiento seguido o cualquier SOS en atención (su GPS llega en la misma fila). */
   const esEnVivo = (a: Alerta) => idSeguido === a.id || (idsSOS.has(a.id) && a.estado === 'EN_PROCESO')
+  const sinSenal = (a: Alerta) => segundosSinSenal(a, idsSOS.has(a.id) || idsReales.has(a.id), ahora)
 
   /* ── Acciones ── */
 
@@ -462,6 +514,24 @@ export default function OperadorDashboard() {
     // Si estaba en el panel central, vuelve a "Sin alerta seleccionada".
     setSeleccionId((sel) => (sel === alerta.id ? null : sel))
     setAviso(`Alerta descartada (${motivo}).`)
+  }
+
+  const confirmarEscalamiento = async (alerta: Alerta, motivo: MotivoEscalamiento) => {
+    setPorEscalar(null)
+    if (idsSOS.has(alerta.id) || idsReales.has(alerta.id)) {
+      const caso = idsSOS.has(alerta.id) ? { alertaId: alerta.id } : { acompanamientoId: alerta.id }
+      const error = await escalamientos.escalar(caso, motivo)
+      if (error) {
+        setAviso(error)
+        return
+      }
+    } else {
+      setEscaladasMock((prev) => ({
+        ...prev,
+        [alerta.id]: { motivo: textoMotivoEscalamiento(motivo), en: new Date().toISOString() },
+      }))
+    }
+    setAviso(`Caso escalado a supervisor (${textoMotivoEscalamiento(motivo)}).`)
   }
 
   const marcarResuelta = async () => {
@@ -621,6 +691,7 @@ export default function OperadorDashboard() {
                   alerta={alerta}
                   estaSeleccionada={sel?.id === alerta.id}
                   enVivo={esEnVivo(alerta)}
+                  senalPerdidaSeg={sinSenal(alerta)}
                   onClick={() => setSeleccionId(alerta.id)}
                   onAccion={() => void manejarAccion(alerta)}
                   onRechazar={() => setPorRechazar(alerta)}
@@ -641,8 +712,22 @@ export default function OperadorDashboard() {
                 lng: sel.lng,
                 sinUbicacion: sel.sinUbicacion,
                 enVivo: esEnVivo(sel),
+                senalPerdidaSeg: sinSenal(sel),
               }
             }
+            // Todos los casos abiertos, sin importar la pestaña: el mapa es la vista general.
+            puntos={alertas
+              .filter((a) => a.estado !== 'RESUELTA')
+              .map((a) => ({
+                id: a.id,
+                tipo: a.tipo,
+                lat: a.lat,
+                lng: a.lng,
+                sinUbicacion: a.sinUbicacion,
+                senalPerdidaSeg: sinSenal(a),
+                nombre: a.nombre,
+              }))}
+            onSeleccionar={setSeleccionId}
             ruta={sel?.rutaCoords ?? null}
             margenInferior={MARGEN_TARJETA_FLOTANTE}
           />
@@ -674,6 +759,7 @@ export default function OperadorDashboard() {
                       style={{ color: colorPorTipo(sel.tipo) }}
                     >
                       {labelPorTipo(sel.tipo)} · {estadoTexto(sel.estado)}
+                      {sel.escalada && <span className="text-purple-300"> · Escalada</span>}
                     </p>
                     <h3 className="mt-0.5 text-base font-semibold text-white">{sel.nombre}</h3>
                     {sel.descripcion && <p className="mt-1 text-sm text-slate-400">{sel.descripcion}</p>}
@@ -689,7 +775,11 @@ export default function OperadorDashboard() {
 
                 {(esAcompanamientoReal || esSOSReal) && (
                   <p className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                    {esEnVivo(sel) && !sel.sinUbicacion ? (
+                    {sinSenal(sel) != null ? (
+                      <span className="flex items-center gap-1.5 font-semibold text-orange-400 animate-pulse">
+                        <TriangleAlert size={13} /> Señal perdida hace {textoDuracionCorta(sinSenal(sel)!)} · última ubicación conocida
+                      </span>
+                    ) : esEnVivo(sel) && !sel.sinUbicacion ? (
                       <>
                         <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse" aria-hidden />
                         Ubicación en vivo: {sel.actualizadoEn && horaLarga(sel.actualizadoEn)}
@@ -701,6 +791,8 @@ export default function OperadorDashboard() {
                     ) : null}
                   </p>
                 )}
+
+                {sel.usuarioId && <ContextoCiudadanoPanel usuarioId={sel.usuarioId} />}
 
                 <button
                   type="button"
@@ -768,6 +860,26 @@ export default function OperadorDashboard() {
                     Llamada de voz con {sel.nombre}
                   </span>
                   <ChevronRight size={14} className="text-emerald-400/70" />
+                </button>
+              )}
+              {sel?.escalada ? (
+                <div className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-purple-500/60 bg-purple-500/15 text-sm font-semibold text-purple-200 shadow-[0_0_16px_rgba(168,85,247,0.25)]">
+                  <ShieldAlert size={16} strokeWidth={2} />
+                  <span className="min-w-0 truncate">Escalada a supervisor · {sel.escalada.motivo}</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => sel && setPorEscalar(sel)}
+                  disabled={!sel || sel.estado !== 'EN_PROCESO'}
+                  title={!sel ? 'Selecciona una alerta' : sel.estado !== 'EN_PROCESO' ? 'Toma el caso antes de escalarlo' : undefined}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-purple-500 bg-purple-500/10 text-sm font-semibold text-purple-200 hover:bg-purple-500/20 hover:shadow-[0_0_16px_rgba(168,85,247,0.35)] disabled:opacity-40 disabled:hover:bg-purple-500/10 disabled:hover:shadow-none transition-all"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <ShieldAlert size={16} strokeWidth={2} />
+                    Escalar a Supervisor
+                  </span>
+                  <ChevronRight size={14} className="text-purple-400/70" />
                 </button>
               )}
               {[
@@ -838,6 +950,8 @@ export default function OperadorDashboard() {
                 cargando={chat.cargando}
                 error={chat.error}
                 onEnviar={chat.enviar}
+                otroEscribiendo={chat.otroEscribiendo}
+                onEscribiendo={chat.avisarEscribiendo}
               />
             ) : sel ? (
               <ol className="ml-1.5 border-l border-slate-700 overflow-y-auto">
@@ -853,10 +967,26 @@ export default function OperadorDashboard() {
                         }`}
                         aria-hidden
                       />
-                      <p className={`text-sm ${ultima ? 'text-slate-100' : 'text-slate-400'}`}>{entrada}</p>
+                      <p className={`text-sm ${ultima && !sel.escalada ? 'text-slate-100' : 'text-slate-400'}`}>{entrada}</p>
                     </li>
                   )
                 })}
+                {sel.escalada && (
+                  <li className="relative pl-5 pt-1">
+                    <span
+                      className="absolute -left-[6px] top-2.5 w-[11px] h-[11px] rounded-full bg-purple-400 shadow-[0_0_12px_rgba(192,132,252,0.95)]"
+                      aria-hidden
+                    />
+                    <div className="rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2">
+                      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-300">
+                        <ShieldAlert size={12} /> Prioritario
+                      </p>
+                      <p className="mt-0.5 text-sm font-semibold text-purple-100">
+                        {horaDe(sel.escalada.en)} - Escalada a supervisor: {sel.escalada.motivo}
+                      </p>
+                    </div>
+                  </li>
+                )}
               </ol>
             ) : (
               <div className="flex flex-col items-center text-center text-slate-500 text-sm py-10">
@@ -884,6 +1014,13 @@ export default function OperadorDashboard() {
           </div>
         </aside>
       </div>
+      {porEscalar && (
+        <ModalEscalar
+          alerta={porEscalar}
+          onCancelar={() => setPorEscalar(null)}
+          onConfirmar={(motivo) => void confirmarEscalamiento(porEscalar, motivo)}
+        />
+      )}
       {porRechazar && (
         <ConfirmarRechazo
           alerta={porRechazar}
@@ -996,6 +1133,7 @@ function AlertaCard({
   alerta,
   estaSeleccionada,
   enVivo,
+  senalPerdidaSeg,
   onClick,
   onAccion,
   onRechazar,
@@ -1003,6 +1141,8 @@ function AlertaCard({
   alerta: Alerta
   estaSeleccionada: boolean
   enVivo: boolean
+  /** Segundos sin señal del teléfono (null = recibiendo bien o no aplica). */
+  senalPerdidaSeg: number | null
   onClick: () => void
   onAccion: () => void
   onRechazar: () => void
@@ -1068,7 +1208,17 @@ function AlertaCard({
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${estadoClases(alerta.estado)}`}>
               {estadoTexto(alerta.estado)}
             </span>
+            {alerta.escalada && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-500/50 bg-purple-500/15 text-purple-300">
+                <ShieldAlert size={11} /> Escalada
+              </span>
+            )}
           </div>
+          {senalPerdidaSeg != null && (
+            <span className="mb-1 inline-flex items-center gap-1 rounded-md border border-orange-500/50 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-300 animate-pulse">
+              <TriangleAlert size={11} /> Señal perdida hace {textoDuracionCorta(senalPerdidaSeg)}
+            </span>
+          )}
 
           <h4 className="text-sm font-bold text-white truncate">{alerta.nombre}</h4>
           <p className="text-[12px] text-slate-400 mt-0.5 truncate">
@@ -1143,6 +1293,156 @@ function AlertaCard({
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+/* ──────────────────── Contexto del ciudadano ──────────────────── */
+
+const FORMATO_RELATIVO = new Intl.RelativeTimeFormat('es-CL', { numeric: 'auto' })
+
+/** "hace 3 días", "hace 1 mes"… */
+function haceCuanto(iso: string): string {
+  const seg = (Date.parse(iso) - Date.now()) / 1000
+  const escalas: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['year', 31_536_000],
+    ['month', 2_592_000],
+    ['week', 604_800],
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+  ]
+  for (const [unidad, s] of escalas) {
+    if (Math.abs(seg) >= s) return FORMATO_RELATIVO.format(Math.round(seg / s), unidad)
+  }
+  return 'recién'
+}
+
+/**
+ * Historial de alertas y contactos de confianza del ciudadano (solo conteos,
+ * vía RPC contexto_ciudadano). No hay datos de plan/suscripción en el sistema.
+ */
+function ContextoCiudadanoPanel({ usuarioId }: { usuarioId: string }) {
+  const { datos, cargando, error } = useContextoCiudadano(usuarioId)
+
+  if (cargando) {
+    return (
+      <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+        <Loader2 size={12} className="animate-spin" /> Cargando contexto del ciudadano…
+      </p>
+    )
+  }
+  if (error || !datos) {
+    return <p className="mt-3 text-xs text-slate-500">Contexto del ciudadano no disponible.</p>
+  }
+
+  const previas = datos.alertas_previas
+  return (
+    <dl className="mt-3 grid gap-1.5 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-2.5 text-xs">
+      <div className="flex items-center gap-2">
+        <History size={13} className="shrink-0 text-slate-400" aria-hidden />
+        <dt className="text-slate-500">Historial:</dt>
+        <dd className={previas > 0 ? 'text-amber-200' : 'text-slate-300'}>
+          {previas === 0
+            ? '0 alertas previas'
+            : `${previas} alerta${previas === 1 ? '' : 's'} previa${previas === 1 ? '' : 's'}`}
+          {datos.ultima_alerta_previa && (
+            <span className="text-slate-500"> (última: {haceCuanto(datos.ultima_alerta_previa)})</span>
+          )}
+        </dd>
+      </div>
+      <div className="flex items-center gap-2">
+        <ContactRound size={13} className="shrink-0 text-slate-400" aria-hidden />
+        <dt className="text-slate-500">Contactos:</dt>
+        <dd className="flex items-center gap-1.5 text-slate-300">
+          {datos.contactos}/5 configurados
+          {datos.contactos > 0 ? (
+            <CircleCheck size={13} className="text-emerald-400" aria-label="Tiene contactos de confianza" />
+          ) : (
+            <TriangleAlert size={13} className="text-amber-400" aria-label="Sin contactos de confianza" />
+          )}
+        </dd>
+      </div>
+    </dl>
+  )
+}
+
+/* ──────────────────── Escalar a supervisor ──────────────────── */
+
+function ModalEscalar({
+  alerta,
+  onCancelar,
+  onConfirmar,
+}: {
+  alerta: Alerta
+  onCancelar: () => void
+  onConfirmar: (motivo: MotivoEscalamiento) => void
+}) {
+  const [motivo, setMotivo] = useState<MotivoEscalamiento>('violencia')
+  const cancelarRef = useRef<HTMLButtonElement | null>(null)
+  const onCancelarRef = useRef(onCancelar)
+  useEffect(() => {
+    onCancelarRef.current = onCancelar
+  })
+  useEffect(() => {
+    cancelarRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancelarRef.current()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4" onClick={onCancelar}>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="escalar-titulo"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-purple-500/40 bg-slate-900 p-5 shadow-[0_20px_50px_rgba(0,0,0,0.55),0_0_30px_rgba(168,85,247,0.15)]"
+      >
+        <h2 id="escalar-titulo" className="flex items-center gap-2 text-base font-bold text-white">
+          <ShieldAlert size={18} className="text-purple-400" /> Escalar a supervisor
+        </h2>
+        <p className="mt-1 text-sm text-slate-400">
+          {labelPorTipo(alerta.tipo)} · {alerta.nombre}. Queda registrado en la bitácora como prioritario.
+        </p>
+
+        <label htmlFor="motivo-escalado" className="mt-4 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          ¿Motivo del escalado?
+        </label>
+        <select
+          id="motivo-escalado"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value as MotivoEscalamiento)}
+          className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-purple-500/70 focus:ring-2 focus:ring-purple-500/20"
+        >
+          {MOTIVOS_ESCALAMIENTO.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.texto}
+            </option>
+          ))}
+        </select>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            ref={cancelarRef}
+            type="button"
+            onClick={onCancelar}
+            className="rounded-[10px] border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirmar(motivo)}
+            className="rounded-[10px] bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500 shadow-[0_0_16px_rgba(168,85,247,0.45)] transition-colors"
+          >
+            Escalar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

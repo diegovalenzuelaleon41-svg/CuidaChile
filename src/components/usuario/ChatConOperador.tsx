@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Headset, Loader2, Send, X } from 'lucide-react'
 import { MAX_MENSAJE, type EstadoAcompanamiento, type MensajeChat } from '../../lib/acompanamientos'
+import PuntosEscribiendo from '../PuntosEscribiendo'
 
 function fmtHora(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
@@ -17,13 +18,28 @@ interface Props {
   onEnviar: (texto: string) => Promise<string | null>
   /** Se abre desde la pantalla SOS (pantalla completa): va por encima de ella. */
   sobreSOS?: boolean
+  /** El operador está escribiendo (Realtime Broadcast). */
+  otroEscribiendo?: boolean
+  /** Avisar al operador que el ciudadano está escribiendo. */
+  onEscribiendo?: () => void
 }
 
 /**
  * Chat real con el operador de la central (panel deslizable desde abajo).
  * Los mensajes viven en Supabase (tabla mensajes) y llegan por Realtime.
  */
-export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, cargando, error, onEnviar, sobreSOS = false }: Props) {
+export default function ChatConOperador({
+  abierto,
+  onCerrar,
+  estado,
+  mensajes,
+  cargando,
+  error,
+  onEnviar,
+  sobreSOS = false,
+  otroEscribiendo = false,
+  onEscribiendo,
+}: Props) {
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null)
@@ -37,7 +53,7 @@ export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, c
     if (!abierto) return
     const el = listaRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [abierto, mensajes.length])
+  }, [abierto, mensajes.length, otroEscribiendo])
 
   // Escape cierra; al abrir, foco en el campo.
   const onCerrarRef = useRef(onCerrar)
@@ -133,6 +149,7 @@ export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, c
               )
             })
           )}
+          {otroEscribiendo && !cargando && <PuntosEscribiendo quien="El operador" />}
         </div>
 
         {(errorEnvio || error) && (
@@ -156,7 +173,10 @@ export default function ChatConOperador({ abierto, onCerrar, estado, mensajes, c
             rows={1}
             value={texto}
             maxLength={MAX_MENSAJE}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              setTexto(e.target.value)
+              onEscribiendo?.()
+            }}
             onKeyDown={(e) => {
               // Enter envía; Shift+Enter hace salto de línea.
               if (e.key === 'Enter' && !e.shiftKey) {

@@ -2285,6 +2285,8 @@ export default function Usuario() {
             cargando={chat.cargando}
             error={chat.error}
             onEnviar={chat.enviar}
+            otroEscribiendo={chat.otroEscribiendo}
+            onEscribiendo={chat.avisarEscribiendo}
           />
         )}
       </main>
@@ -2375,6 +2377,8 @@ export default function Usuario() {
           cargando={chatSOS.cargando}
           error={chatSOS.error}
           onEnviar={chatSOS.enviar}
+          otroEscribiendo={chatSOS.otroEscribiendo}
+          onEscribiendo={chatSOS.avisarEscribiendo}
           sobreSOS
         />
       )}

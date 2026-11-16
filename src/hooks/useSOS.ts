@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ESTADOS_SOS_ABIERTOS, INTERVALO_GPS_SOS_MS, type AlertaSOS } from '../lib/alertas'
+import { LATIDO_GPS_MS } from '../lib/acompanamientos'
 
 /**
  * Lado usuario del botón SOS:
@@ -86,15 +87,21 @@ export function useSOS(usuarioId: string | undefined, obtenerPos: () => [number,
   useEffect(() => {
     if (!id || !abierta) return
     let ultimo: string | null = null
+    let enviadoEn = 0
     async function enviar() {
       const p = obtenerPosRef.current()
       if (!p) return
       const [lng, lat] = p
       const clave = `${lat.toFixed(6)},${lng.toFixed(6)}`
-      if (clave === ultimo) return // sin movimiento: no gastar una escritura
+      // Sin movimiento no se gasta una escritura… salvo el latido: si no, el
+      // operador no distinguiría a alguien quieto de una señal perdida.
+      if (clave === ultimo && Date.now() - enviadoEn < LATIDO_GPS_MS) return
       const { error } = await supabase.from('alertas').update({ lat, lng }).eq('id', id)
       if (error) console.error('[sos] no se pudo enviar ubicación:', error.code, error.message)
-      else ultimo = clave
+      else {
+        ultimo = clave
+        enviadoEn = Date.now()
+      }
     }
     void enviar()
     const t = setInterval(enviar, INTERVALO_GPS_SOS_MS)

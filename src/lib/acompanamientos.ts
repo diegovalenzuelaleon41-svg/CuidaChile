@@ -48,4 +48,13 @@ export const MAX_MENSAJE = 2000
 /** Cada cuánto el usuario envía su posición mientras el acompañamiento está EN_CURSO. */
 export const INTERVALO_GPS_MS = 5000
 
+/**
+ * Aunque la persona no se mueva, se reenvía su posición cada 15 s: así el
+ * operador distingue "está quieta" de "perdimos la señal" (SENAL_PERDIDA_MS).
+ */
+export const LATIDO_GPS_MS = 15_000
+
+/** Sin noticias del teléfono por más de esto → el panel del operador marca "Señal perdida". */
+export const SENAL_PERDIDA_MS = 45_000
+
 export const ESTADOS_ABIERTOS: EstadoAcompanamiento[] = ['PENDIENTE', 'EN_CURSO']

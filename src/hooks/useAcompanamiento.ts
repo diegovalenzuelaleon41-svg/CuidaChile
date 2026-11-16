@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { ESTADOS_ABIERTOS, INTERVALO_GPS_MS, type Acompanamiento } from '../lib/acompanamientos'
+import { ESTADOS_ABIERTOS, INTERVALO_GPS_MS, LATIDO_GPS_MS, type Acompanamiento } from '../lib/acompanamientos'
 
 interface Solicitud {
   origen: string
@@ -93,18 +93,23 @@ export function useAcompanamiento(usuarioId: string | undefined, obtenerPos: () 
   useEffect(() => {
     if (!id || estado !== 'EN_CURSO') return
     let ultimo: string | null = null
+    let enviadoEn = 0
     async function enviar() {
       const p = obtenerPosRef.current()
       if (!p) return
       const [lng, lat] = p
       const clave = `${lat.toFixed(6)},${lng.toFixed(6)}`
-      if (clave === ultimo) return // sin movimiento: no gastar una escritura
+      // Sin movimiento no se gasta una escritura… salvo el latido (ver LATIDO_GPS_MS).
+      if (clave === ultimo && Date.now() - enviadoEn < LATIDO_GPS_MS) return
       const { error } = await supabase
         .from('acompanamientos')
         .update({ lat_actual: lat, lng_actual: lng })
         .eq('id', id)
       if (error) console.error('[acompañamiento] no se pudo enviar ubicación:', error.code, error.message)
-      else ultimo = clave
+      else {
+        ultimo = clave
+        enviadoEn = Date.now()
+      }
     }
     void enviar()
     const t = setInterval(enviar, INTERVALO_GPS_MS)

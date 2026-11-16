@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { MAX_MENSAJE, type MensajeChat } from '../lib/acompanamientos'
 
@@ -6,6 +7,11 @@ const COLUMNAS = 'id, acompanamiento_id, alerta_id, emisor_id, emisor_rol, conte
 
 /** A qué pertenece el chat: una Ruta Segura o una alerta SOS. */
 export type CampoChat = 'acompanamiento_id' | 'alerta_id'
+
+/** Cada cuánto, como máximo, se avisa "estoy escribiendo" mientras se tipea. */
+const AVISO_ESCRIBIENDO_MS = 2000
+/** Sin un aviso nuevo en este tiempo, el indicador del otro se apaga solo. */
+const EXPIRA_ESCRIBIENDO_MS = 4000
 
 function ordenar(lista: MensajeChat[]) {
   return [...lista].sort((a, b) => a.creado_en.localeCompare(b.creado_en))
@@ -40,6 +46,10 @@ export function useChat(campo: CampoChat, chatId: string | null, rol: 'usuario' 
     listo: false,
   })
   const [error, setError] = useState<string | null>(null)
+  // "Escribiendo…" del otro lado (Realtime Broadcast: efímero, nunca se guarda).
+  const [otroEscribiendo, setOtroEscribiendo] = useState<{ clave: string | null; hasta: number }>({ clave: null, hasta: 0 })
+  const canalRef = useRef<RealtimeChannel | null>(null)
+  const ultimoAvisoRef = useRef(0)
 
   useEffect(() => {
     if (!clave || !chatId) return
@@ -79,18 +89,46 @@ export function useChat(campo: CampoChat, chatId: string | null, rol: 'usuario' 
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `${campo}=eq.${chatId}` },
-        (payload) => agregar([payload.new as MensajeChat]),
+        (payload) => {
+          const m = payload.new as MensajeChat
+          agregar([m])
+          // Llegó su mensaje: deja de "escribir".
+          if (m.emisor_rol !== rol) setOtroEscribiendo({ clave: id, hasta: 0 })
+        },
       )
+      // Solo dice QUIÉN escribe (nunca el texto). Los propios no llegan (self: false).
+      .on('broadcast', { event: 'escribiendo' }, ({ payload }) => {
+        if (payload?.rol && payload.rol !== rol) setOtroEscribiendo({ clave: id, hasta: Date.now() + EXPIRA_ESCRIBIENDO_MS })
+      })
       .subscribe((status) => {
         // Al (re)conectar se relee: no se pierde lo enviado mientras no había canal.
         if (status === 'SUBSCRIBED') void cargar()
       })
+    canalRef.current = canal
 
     return () => {
       vivo = false
+      canalRef.current = null
       supabase.removeChannel(canal)
     }
-  }, [clave, campo, chatId])
+  }, [clave, campo, chatId, rol])
+
+  // Apagar el indicador cuando vence (si no llegan más avisos).
+  const hasta = otroEscribiendo.hasta
+  useEffect(() => {
+    const resto = hasta - Date.now()
+    if (resto <= 0) return
+    const t = setTimeout(() => setOtroEscribiendo((prev) => ({ ...prev, hasta: 0 })), resto)
+    return () => clearTimeout(t)
+  }, [hasta])
+
+  /** Llamar en cada tecla: avisa al otro como máximo cada 2 s. */
+  const avisarEscribiendo = useCallback(() => {
+    const ahora = Date.now()
+    if (!canalRef.current || ahora - ultimoAvisoRef.current < AVISO_ESCRIBIENDO_MS) return
+    ultimoAvisoRef.current = ahora
+    void canalRef.current.send({ type: 'broadcast', event: 'escribiendo', payload: { rol } })
+  }, [rol])
 
   /** Envía un mensaje. Devuelve un mensaje de error o null. */
   const enviar = useCallback(
@@ -122,5 +160,7 @@ export function useChat(campo: CampoChat, chatId: string | null, rol: 'usuario' 
     cargando: !!clave && !(actual && estado.listo),
     error,
     enviar,
+    otroEscribiendo: !!clave && otroEscribiendo.clave === clave && otroEscribiendo.hasta > 0,
+    avisarEscribiendo,
   }
 }

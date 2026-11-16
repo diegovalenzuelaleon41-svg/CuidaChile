@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
-import { Loader2, Pin } from 'lucide-react'
+import { Loader2, Pin, TriangleAlert } from 'lucide-react'
 import type { GeoJSONSource } from 'maplibre-gl'
 import { COLOR_NEON as NEON, type AlertaTipo } from '../../lib/mockAlerts'
 import { obtenerRutaCalles } from '../../lib/rutaOSRM'
@@ -13,6 +13,8 @@ maplibregl.config.WORKER_URL = mapWorkerUrl
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 const SANTIAGO: [number, number] = [-70.6693, -33.4489]
 const ZOOM_ALERTA = 15
+/** Px que tapa abajo la tarjeta "Sin alerta seleccionada". */
+const MARGEN_SIN_SELECCION = 130
 
 const FUENTE_RUTA = 'ruta-acompanamiento'
 const FUENTE_EXTREMOS = 'ruta-acompanamiento-extremos'
@@ -27,6 +29,10 @@ export interface PuntoMapa {
   sinUbicacion?: boolean
   /** Acompañamiento en curso: la posición llega por Realtime (pin con pulso). */
   enVivo?: boolean
+  /** Segundos sin señal del teléfono: el pin queda "fantasma" (no es posición en vivo). */
+  senalPerdidaSeg?: number | null
+  /** Para el tooltip y el lector de pantalla de los pines de la bandeja. */
+  nombre?: string
 }
 
 export interface RutaMapa {
@@ -37,6 +43,9 @@ export interface RutaMapa {
 
 interface Props {
   seleccion: PuntoMapa | null
+  /** Todas las alertas de la bandeja: pines chicos clicables (la seleccionada va aparte). */
+  puntos?: PuntoMapa[]
+  onSeleccionar?: (id: string) => void
   ruta: RutaMapa | null
   /** Px tapados abajo por una tarjeta flotante: los centrados quedan por encima. */
   margenInferior?: number
@@ -81,11 +90,91 @@ function crearPin(tipo: AlertaTipo, enVivo: boolean) {
   return el
 }
 
-/** Mapa "Dark Control Room" del operador: pin de la alerta seleccionada + ruta del acompañamiento. */
-export default function MapaOperador({ seleccion, ruta, margenInferior = 0 }: Props) {
+/** Pin chico de una alerta de la bandeja (no seleccionada). Clic → seleccionarla. */
+function crearPinBandeja(p: PuntoMapa, onClick: () => void) {
+  const color = NEON[p.tipo]
+  const el = document.createElement('div')
+  el.style.cssText = 'width:16px;height:16px;cursor:pointer;'
+  el.setAttribute('role', 'button')
+  el.setAttribute('tabindex', '0')
+  el.setAttribute('aria-label', `Ver alerta de ${p.nombre ?? 'ciudadano'}`)
+  el.title = p.nombre ?? ''
+  el.addEventListener('click', onClick)
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick()
+    }
+  })
+
+  // Hijo interno para el hover: el transform del elemento externo es de MapLibre.
+  const cuerpo = document.createElement('div')
+  cuerpo.style.cssText = 'position:absolute;inset:0;transition:transform 150ms;'
+  el.addEventListener('mouseenter', () => (cuerpo.style.transform = 'scale(1.35)'))
+  el.addEventListener('mouseleave', () => (cuerpo.style.transform = ''))
+  el.appendChild(cuerpo)
+
+  if (p.tipo === 'SOS') {
+    const pulso = document.createElement('div')
+    pulso.className = 'pin-neon-pulso'
+    pulso.style.cssText = `position:absolute;inset:0;border-radius:9999px;background:${color};`
+    cuerpo.appendChild(pulso)
+  }
+  const punto = document.createElement('div')
+  punto.style.cssText =
+    `position:absolute;inset:0;border-radius:9999px;background:${color};` +
+    `border:2px solid #FFFFFF;box-shadow:0 0 10px ${color},0 0 20px ${color}88;`
+  cuerpo.appendChild(punto)
+  return el
+}
+
+/* ── Movimiento suave de los pines (el GPS llega a saltos de 3–5 s) ── */
+
+const animaciones = new WeakMap<maplibregl.Marker, number>()
+
+function moverSuave(marker: maplibregl.Marker, destino: [number, number], ms = 900) {
+  cancelAnimationFrame(animaciones.get(marker) ?? 0)
+  const desde = marker.getLngLat()
+  const sinAnimar = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (sinAnimar || (desde.lng === destino[0] && desde.lat === destino[1])) {
+    marker.setLngLat(destino)
+    return
+  }
+  const t0 = performance.now()
+  const paso = (t: number) => {
+    const k = Math.min(1, (t - t0) / ms)
+    const e = 1 - (1 - k) ** 3 // ease-out
+    marker.setLngLat([desde.lng + (destino[0] - desde.lng) * e, desde.lat + (destino[1] - desde.lat) * e])
+    if (k < 1) animaciones.set(marker, requestAnimationFrame(paso))
+    else animaciones.delete(marker)
+  }
+  animaciones.set(marker, requestAnimationFrame(paso))
+}
+
+function quitarMarker(marker: maplibregl.Marker) {
+  cancelAnimationFrame(animaciones.get(marker) ?? 0)
+  marker.remove()
+}
+
+/** Pin fantasma (señal perdida) o normal. MapLibre pisa style.opacity: hay que usar su API. */
+function aplicarFantasma(marker: maplibregl.Marker, fantasma: boolean) {
+  marker.setOpacity(fantasma ? '0.5' : '1', fantasma ? '0.5' : '0.2')
+  marker.getElement().querySelectorAll<HTMLElement>('div').forEach((capa) => {
+    capa.style.filter = fantasma ? 'grayscale(0.6)' : ''
+  })
+  marker.getElement().querySelectorAll<HTMLElement>('.pin-neon-pulso').forEach((p) => (p.style.display = fantasma ? 'none' : ''))
+}
+
+/**
+ * Mapa "Dark Control Room" del operador: todas las alertas de la bandeja como
+ * pines chicos, la seleccionada grande (flyTo + seguimiento en vivo) y la ruta
+ * del acompañamiento.
+ */
+export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ruta, margenInferior = 0 }: Props) {
   const contenedorRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markerRef = useRef<maplibregl.Marker | null>(null)
+  const bandejaRef = useRef(new Map<string, maplibregl.Marker>())
   const [listo, setListo] = useState(false)
 
   // ── 1. Mapa + capas de la ruta (glow + línea + extremos) ──
@@ -144,9 +233,12 @@ export default function MapaOperador({ seleccion, ruta, margenInferior = 0 }: Pr
       setListo(true)
     })
 
+    const bandeja = bandejaRef.current
     return () => {
-      markerRef.current?.remove()
+      if (markerRef.current) quitarMarker(markerRef.current)
       markerRef.current = null
+      bandeja.forEach(quitarMarker)
+      bandeja.clear()
       map.remove()
       mapRef.current = null
     }
@@ -167,7 +259,7 @@ export default function MapaOperador({ seleccion, ruta, margenInferior = 0 }: Pr
     margenRef.current = margenInferior
   })
   useEffect(() => {
-    markerRef.current?.remove()
+    if (markerRef.current) quitarMarker(markerRef.current)
     markerRef.current = null
     const map = mapRef.current
     const sel = seleccionRef.current
@@ -181,11 +273,19 @@ export default function MapaOperador({ seleccion, ruta, margenInferior = 0 }: Pr
       }
       return
     }
-    markerRef.current = new maplibregl.Marker({ element: crearPin(selTipo, selVivo) })
+    const el = crearPin(selTipo, selVivo)
+    el.style.zIndex = '2' // sobre los pines de la bandeja
+    markerRef.current = new maplibregl.Marker({ element: el })
       .setLngLat([sel.lng, sel.lat])
       .addTo(map)
     map.flyTo({ center: [sel.lng, sel.lat], zoom: ZOOM_ALERTA, duration: 900, padding: { top: 0, right: 0, left: 0, bottom: margenRef.current } })
   }, [selId, selTipo, selVivo, conUbicacion, listo])
+
+  // ── 2b. Señal perdida: pin al 50 % ("fantasma"), sin pulso de "en vivo" ──
+  const fantasma = seleccion?.senalPerdidaSeg != null
+  useEffect(() => {
+    if (markerRef.current) aplicarFantasma(markerRef.current, fantasma)
+  }, [fantasma, selId, selVivo, conUbicacion, listo])
 
   // ── 3. Tracking: mover el pin (sin recrearlo) cuando cambian las coordenadas ──
   const lat = seleccion?.lat
@@ -200,10 +300,66 @@ export default function MapaOperador({ seleccion, ruta, margenInferior = 0 }: Pr
     const map = mapRef.current
     const marker = markerRef.current
     if (!map || !marker || lat == null || lng == null) return
-    marker.setLngLat([lng, lat])
+    moverSuave(marker, [lng, lat])
     // Si el ciudadano sale de la vista, la cámara lo sigue.
     if (!map.getBounds().contains([lng, lat])) map.easeTo({ center: [lng, lat], duration: 600, padding: { top: 0, right: 0, left: 0, bottom: margenRef.current } })
   }, [selId, lat, lng])
+
+  // ── 3b. Pines de la bandeja: se crean, mueven (suave) y quitan según la lista ──
+  const puntosRef = useRef(puntos)
+  const onSeleccionarRef = useRef(onSeleccionar)
+  useEffect(() => {
+    puntosRef.current = puntos
+    onSeleccionarRef.current = onSeleccionar
+  })
+  const conGps = puntos.filter((p) => !p.sinUbicacion)
+  const bandejaKey = conGps.map((p) => `${p.id}|${p.lat}|${p.lng}|${p.senalPerdidaSeg != null}`).join(';')
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !listo) return
+    const bandeja = bandejaRef.current
+    // La seleccionada no va aquí: tiene su pin grande (efecto 2).
+    const visibles = puntosRef.current.filter((p) => !p.sinUbicacion && p.id !== selId)
+    const ids = new Set(visibles.map((p) => p.id))
+    bandeja.forEach((m, id) => {
+      if (!ids.has(id)) {
+        quitarMarker(m)
+        bandeja.delete(id)
+      }
+    })
+    for (const p of visibles) {
+      let m = bandeja.get(p.id)
+      if (!m) {
+        m = new maplibregl.Marker({ element: crearPinBandeja(p, () => onSeleccionarRef.current?.(p.id)) })
+          .setLngLat([p.lng, p.lat])
+          .addTo(map)
+        bandeja.set(p.id, m)
+      } else {
+        moverSuave(m, [p.lng, p.lat])
+      }
+      aplicarFantasma(m, p.senalPerdidaSeg != null)
+    }
+  }, [bandejaKey, selId, listo])
+
+  // ── 3c. Sin selección: la cámara abarca todas las alertas (y se reajusta si llega una nueva) ──
+  const idsConGps = conGps
+    .map((p) => p.id)
+    .sort()
+    .join(',')
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !listo || selId) return
+    const ps = puntosRef.current.filter((p) => !p.sinUbicacion)
+    if (ps.length === 0) return
+    const padding = { top: 70, right: 60, left: 60, bottom: MARGEN_SIN_SELECCION }
+    if (ps.length === 1) {
+      map.easeTo({ center: [ps[0].lng, ps[0].lat], zoom: 14, duration: 900, padding })
+      return
+    }
+    const limites = new maplibregl.LngLatBounds()
+    ps.forEach((p) => limites.extend([p.lng, p.lat]))
+    map.fitBounds(limites, { padding, maxZoom: 15, duration: 900 })
+  }, [idsConGps, selId, listo])
 
   // ── 4. Línea de ruta origen → destino (por calles; recta si OSRM falla) ──
   useEffect(() => {
@@ -249,6 +405,12 @@ export default function MapaOperador({ seleccion, ruta, margenInferior = 0 }: Pr
           <Pin size={14} strokeWidth={2} />
           Santiago Centro
         </div>
+        {fantasma && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/85 backdrop-blur text-xs font-semibold text-orange-300 border border-orange-500/50 animate-pulse">
+            <TriangleAlert size={13} />
+            Señal perdida hace {seleccion!.senalPerdidaSeg! < 60 ? `${seleccion!.senalPerdidaSeg} s` : `${Math.floor(seleccion!.senalPerdidaSeg! / 60)} min`}
+          </div>
+        )}
         {seleccion?.sinUbicacion && (
           <div className="px-3 py-1.5 rounded-full bg-slate-900/80 backdrop-blur text-xs text-amber-300 border border-amber-500/30">
             Sin ubicación GPS del ciudadano
