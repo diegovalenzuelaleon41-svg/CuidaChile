@@ -51,7 +51,7 @@ body * {
   }
   /* Glassmorphism para las tarjetas flotantes del hero */
   .glass-card {
-    @apply rounded-2xl border border-white/80 bg-white/90 backdrop-blur-md shadow-xl shadow-[#0B1E4A]/10 group-hover:shadow-2xl group-hover:shadow-[#0B1E4A]/15 dark:border-white/20;
+    @apply rounded-3xl border border-white/60 bg-white/90 backdrop-blur-md shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)];
   }
   .label-cuida {
     @apply block text-[13px] font-medium text-[#374151] dark:text-slate-300;
@@ -103,6 +103,19 @@ body * {
 
 .float-phone {
   animation: float-phone 4.5s ease-in-out infinite;
+}
+
+/* Inclinación fija del teléfono del hero (se suma a la del mouse). En móvil es menor para no deformarlo. */
+.telefono-3d {
+  --base-rx: 2deg;
+  --base-ry: -6deg;
+}
+
+@media (min-width: 1024px) {
+  .telefono-3d {
+    --base-rx: 5deg;
+    --base-ry: -15deg;
+  }
 }
 
 @keyframes float-card {

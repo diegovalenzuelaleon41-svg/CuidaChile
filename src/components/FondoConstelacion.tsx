@@ -1,12 +1,27 @@
 import { useEffect, useRef } from 'react'
 
-/** Un punto cada tantos px² de superficie, con tope: densidad pareja en cualquier pantalla. */
-const AREA_POR_PUNTO = 16000
-const MAX_PUNTOS = 80
-/** Distancia (px) bajo la cual dos puntos se unen; la línea se intensifica al acercarse. */
-const DISTANCIA_LINEA = 130
 /** Velocidad máxima por eje, en px por frame (~60 fps): deriva lenta. */
 const VELOCIDAD = 0.18
+
+/**
+ * sutil: sigue el tema claro/oscuro y apenas se nota.
+ * neon: siempre sobre fondo oscuro, más densa y brillante, con algunos nodos violeta y con halo.
+ */
+type Variante = 'sutil' | 'neon'
+
+const CONFIG = {
+  /** Un punto cada `area` px² con tope `max`: densidad pareja en cualquier pantalla. */
+  sutil: { area: 16000, max: 80, distancia: 130, violeta: 0, brillantes: 0 },
+  neon: { area: 11000, max: 120, distancia: 140, violeta: 0.22, brillantes: 0.12 },
+}
+
+/** Colores en RGB sin alfa: la opacidad de cada punto y línea se calcula al dibujar. */
+const COLOR = {
+  claro: { punto: '37, 99, 235', alfaPunto: 0.28, alfaLinea: 0.14 },
+  oscuro: { punto: '96, 165, 250', alfaPunto: 0.4, alfaLinea: 0.16 },
+  neon: { punto: '96, 165, 250', alfaPunto: 0.85, alfaLinea: 0.3 },
+}
+const VIOLETA = '167, 139, 250'
 
 interface Punto {
   x: number
@@ -14,22 +29,22 @@ interface Punto {
   vx: number
   vy: number
   r: number
+  violeta: boolean
+  /** Nodo con halo: da la sensación de red de datos con puntos activos. */
+  brillante: boolean
 }
 
-/** Colores en RGB sin alfa: la opacidad de cada punto y línea se calcula al dibujar. */
-const COLOR = {
-  claro: { punto: '37, 99, 235', alfaPunto: 0.28, alfaLinea: 0.14 },
-  oscuro: { punto: '96, 165, 250', alfaPunto: 0.4, alfaLinea: 0.16 },
-}
-
-function crearPuntos(ancho: number, alto: number): Punto[] {
-  const n = Math.min(MAX_PUNTOS, Math.round((ancho * alto) / AREA_POR_PUNTO))
+function crearPuntos(ancho: number, alto: number, variante: Variante): Punto[] {
+  const c = CONFIG[variante]
+  const n = Math.min(c.max, Math.round((ancho * alto) / c.area))
   return Array.from({ length: n }, () => ({
     x: Math.random() * ancho,
     y: Math.random() * alto,
     vx: (Math.random() * 2 - 1) * VELOCIDAD,
     vy: (Math.random() * 2 - 1) * VELOCIDAD,
     r: 1 + Math.random() * 0.9,
+    violeta: Math.random() < c.violeta,
+    brillante: Math.random() < c.brillantes,
   }))
 }
 
@@ -38,7 +53,7 @@ function crearPuntos(ancho: number, alto: number): Punto[] {
  * cuando quedan cerca. Decorativo. Se pausa fuera de pantalla o con la pestaña oculta, y con
  * movimiento reducido se dibuja una sola vez, quieto.
  */
-export default function FondoConstelacion({ className = '' }: { className?: string }) {
+export default function FondoConstelacion({ className = '', variante = 'sutil' }: { className?: string; variante?: Variante }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
@@ -61,12 +76,14 @@ export default function FondoConstelacion({ className = '' }: { className?: stri
       canvas.width = Math.round(ancho * dpr)
       canvas.height = Math.round(alto * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      puntos = crearPuntos(ancho, alto)
+      puntos = crearPuntos(ancho, alto, variante)
     }
 
     function dibujar() {
       if (!ctx) return
-      const c = document.documentElement.classList.contains('dark') ? COLOR.oscuro : COLOR.claro
+      const c =
+        variante === 'neon' ? COLOR.neon : document.documentElement.classList.contains('dark') ? COLOR.oscuro : COLOR.claro
+      const distancia = CONFIG[variante].distancia
       ctx.clearRect(0, 0, ancho, alto)
 
       ctx.lineWidth = 0.7
@@ -75,8 +92,8 @@ export default function FondoConstelacion({ className = '' }: { className?: stri
           const dx = puntos[i].x - puntos[j].x
           const dy = puntos[i].y - puntos[j].y
           const d = Math.hypot(dx, dy)
-          if (d < DISTANCIA_LINEA) {
-            ctx.strokeStyle = `rgba(${c.punto}, ${((1 - d / DISTANCIA_LINEA) * c.alfaLinea).toFixed(3)})`
+          if (d < distancia) {
+            ctx.strokeStyle = `rgba(${c.punto}, ${((1 - d / distancia) * c.alfaLinea).toFixed(3)})`
             ctx.beginPath()
             ctx.moveTo(puntos[i].x, puntos[i].y)
             ctx.lineTo(puntos[j].x, puntos[j].y)
@@ -85,10 +102,17 @@ export default function FondoConstelacion({ className = '' }: { className?: stri
         }
       }
 
-      ctx.fillStyle = `rgba(${c.punto}, ${c.alfaPunto})`
       for (const p of puntos) {
+        const color = p.violeta ? VIOLETA : c.punto
+        if (p.brillante) {
+          ctx.fillStyle = `rgba(${color}, 0.14)`
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.fillStyle = `rgba(${color}, ${c.alfaPunto})`
         ctx.beginPath()
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+        ctx.arc(p.x, p.y, p.brillante ? p.r * 1.5 : p.r, 0, Math.PI * 2)
         ctx.fill()
       }
     }
@@ -155,7 +179,7 @@ export default function FondoConstelacion({ className = '' }: { className?: stri
       mo.disconnect()
       document.removeEventListener('visibilitychange', alCambiarPestana)
     }
-  }, [])
+  }, [variante])
 
   return <canvas ref={canvasRef} className={className} aria-hidden />
 }

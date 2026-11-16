@@ -1,5 +1,5 @@
 import { useRef, type MouseEvent } from 'react'
-import { Shield, ShieldCheck, Timer, Bell, Footprints, MapPin, Share2, Search, Plus } from 'lucide-react'
+import { Shield, ShieldCheck, Timer, Footprints, MapPin, Share2, Search, Plus } from 'lucide-react'
 
 const MAX_TILT = 7
 
@@ -40,8 +40,8 @@ const CONTACTOS = [
 
 /**
  * Composición "floating phone" del hero (solo columna derecha).
- * Teléfono central estilo iPhone con Dynamic Island + 4 cards glass que se
- * superponen a sus bordes, sobre un fondo de puntos bokeh y escudos flotantes.
+ * Teléfono central estilo iPhone, inclinado en 3D con marco metálico, + 3 cards glass que se
+ * superponen a sus bordes, sobre un fondo de puntos bokeh y escudos neón flotantes.
  * Sin dependencias nuevas: animaciones con keyframes CSS (.float-phone/.float-card).
  */
 export default function FloatingPhoneMockup() {
@@ -84,8 +84,10 @@ export default function FloatingPhoneMockup() {
         {ESCUDOS.map(([x, y, s, v], i) => (
           <span
             key={`${x}-${y}`}
-            className={`float-card hidden md:flex absolute items-center justify-center rounded-full bg-white/80 backdrop-blur-sm shadow-[0_8px_24px_rgba(15,23,42,0.10)] ${
-              v === 'rojo' ? 'text-[#DC2626]' : 'text-[#2563EB]'
+            className={`float-card hidden md:flex absolute items-center justify-center rounded-full border backdrop-blur-sm ${
+              v === 'rojo'
+                ? 'border-red-400/40 bg-red-500/10 text-red-400 shadow-[0_0_18px_rgba(248,113,113,0.35)]'
+                : 'border-blue-400/40 bg-blue-500/10 text-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.35)]'
             }`}
             style={{ left: `${x}%`, top: `${y}%`, width: s, height: s, animationDelay: `${i * 0.7}s` }}
           >
@@ -98,12 +100,18 @@ export default function FloatingPhoneMockup() {
       {/* Centrado con flex: la animación float-phone usa transform y anularía un translate-x */}
       <div className="absolute inset-x-0 top-2 md:top-4 z-10 flex justify-center">
       <div className="float-phone">
+        {/* Marco metálico (degradado plateado) + bisel negro + pantalla */}
         <div
           ref={tiltRef}
-          className="w-[260px] h-[540px] md:w-[300px] md:h-[620px] lg:w-[310px] lg:h-[640px] rounded-[48px] bg-gradient-to-b from-[#2A2A2E] to-[#111113] p-[9px] ring-1 ring-black/40 transition-transform duration-200 ease-out will-change-transform"
-          style={{ transform: 'perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))', boxShadow: '0 40px 80px -20px rgba(15, 23, 42, 0.30), 0 20px 40px -20px rgba(15, 23, 42, 0.18), inset 0 0 0 2px rgba(255,255,255,0.06)' }}
+          className="telefono-3d w-[260px] h-[540px] md:w-[300px] md:h-[620px] lg:w-[310px] lg:h-[640px] rounded-[48px] bg-[linear-gradient(145deg,#F1F5F9_0%,#94A3B8_18%,#334155_45%,#CBD5E1_70%,#475569_100%)] p-[3px] transition-transform duration-200 ease-out will-change-transform"
+          style={{
+            transform:
+              'perspective(1000px) rotateX(calc(var(--base-rx, 0deg) + var(--rx, 0deg))) rotateY(calc(var(--base-ry, 0deg) + var(--ry, 0deg)))',
+            boxShadow: '0 50px 90px -24px rgba(0, 0, 0, 0.8), 0 0 60px rgba(59, 130, 246, 0.25)',
+          }}
         >
-          <div className="relative flex flex-col w-full h-full bg-white rounded-[40px] overflow-hidden">
+          <div className="h-full w-full rounded-[45px] bg-[#0B0B0F] p-[6px]">
+          <div className="relative flex flex-col w-full h-full bg-white rounded-[39px] overflow-hidden">
             {/* Dynamic Island */}
             <span className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 w-[92px] h-[26px] rounded-full bg-black" />
 
@@ -186,9 +194,14 @@ export default function FloatingPhoneMockup() {
               <span className="w-24 h-1 rounded-full bg-[#0F172A]/80" />
             </div>
           </div>
+          </div>
         </div>
       </div>
       </div>
+
+      {/* Sombra en el suelo: le da peso al teléfono flotante */}
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-[548px] h-12 w-[300px] -translate-x-1/2 rounded-[50%] bg-black/70 blur-2xl md:top-[640px] lg:top-[660px]" />
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-[540px] h-16 w-[380px] -translate-x-1/2 rounded-[50%] bg-blue-600/25 blur-3xl md:top-[630px] lg:top-[650px]" />
 
       {/* ── Card 1 · arriba izquierda: estado ──────────────────────────── */}
       <div
@@ -207,21 +220,6 @@ export default function FloatingPhoneMockup() {
             <span className="block text-[12px] text-[#64748B]">Ruta vigilada</span>
           </span>
         </div>
-      </div>
-
-      {/* ── Card 2 · arriba derecha: globo azul ─────────────────────────── */}
-      <div
-        className="float-card hidden md:flex absolute top-0 -right-[2%] lg:-right-[4%] z-20 w-[220px] lg:w-[240px] items-start gap-2.5 rounded-2xl rounded-bl-md bg-[#2563EB]/95 backdrop-blur-md border border-white/20 p-3.5 shadow-xl shadow-[#2563EB]/30 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDuration: '6.2s', animationDelay: '-3.1s' }}
-      >
-        {/* Cola del globo de texto, apuntando al teléfono */}
-        <span className="absolute -bottom-2 left-4 w-4 h-4 rotate-45 rounded-sm bg-[#2563EB]/95" aria-hidden />
-        <span className="relative w-8 h-8 rounded-full bg-white/15 text-white flex items-center justify-center shrink-0">
-          <Bell size={16} strokeWidth={1.75} />
-        </span>
-        <p className="relative text-[13px] leading-snug text-white">
-          Tu círculo ve tu ubicación. Mantén la calma y sigue la ruta.
-        </p>
       </div>
 
       {/* ── Card 3 · abajo izquierda: tiempo de respuesta ───────────────── */}
