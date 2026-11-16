@@ -44,9 +44,12 @@ export default function Landing() {
               <div className="mt-8 flex flex-wrap gap-4">
                 <Link
                   to="/registro"
-                  className="group inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#0B1E4A] px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(11,30,74,0.30)] transition-all duration-200 hover:bg-[#132B66] hover:scale-[1.02] active:scale-[0.98] dark:bg-[#2563EB] dark:hover:bg-[#1D4ED8]"
+                  className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-[10px] bg-[#0B1E4A] px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(11,30,74,0.30)] transition-[transform,box-shadow,background-color] duration-200 ease-out hover:scale-[1.02] hover:bg-[#132B66] hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] active:scale-[0.98] dark:bg-[#2563EB] dark:hover:bg-[#1D4ED8]"
                 >
-                  Comenzar ahora <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
+                  {/* Brillo que cruza el botón cada 3 s (.shimmer / .shimmer-3s en index.css) */}
+                  <span className="shimmer shimmer-3s pointer-events-none absolute inset-0" aria-hidden />
+                  <span className="relative">Comenzar ahora</span>
+                  <ArrowRight size={18} className="relative transition-transform group-hover:translate-x-0.5" />
                 </Link>
                 <Link
                   to="/login"

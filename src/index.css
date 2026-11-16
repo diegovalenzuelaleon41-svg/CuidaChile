@@ -212,6 +212,11 @@ body * {
   animation: shimmer 3.2s ease-in-out infinite;
 }
 
+/* "Comenzar ahora" de la landing: una pasada cada 3 s (cruza en el 55% del ciclo y pausa el resto). */
+.shimmer-3s::before {
+  animation-duration: 3s;
+}
+
 /* Ícono de "Reportar": giro corto al pasar el mouse o al tocar. */
 @keyframes icono-giro {
   0%,
@@ -302,7 +307,9 @@ button:active > .icono-alerta {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ruta-luz {
+  .ruta-luz,
+  .shimmer::before {
+    /* Sin animación quedarían quietos (la luz al inicio de la ruta, el brillo fijo sobre el botón) */
     display: none;
   }
 }

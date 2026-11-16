@@ -1,3 +1,5 @@
+import FondoConstelacion from './FondoConstelacion'
+
 /** Silueta aproximada de Chile (lon/lat proyectados a 200×790). Decorativa, no cartográfica. */
 const CHILE_PATH =
   'M130 10 L140 40 L150 70 L156 100 L180 116 L174 140 L152 170 L148 200 L140 230 L124 260 L116 300 L120 330 L112 360 L104 390 L96 420 L92 460 L84 500 L86 540 L88 580 L74 620 L60 660 L74 690 L100 700 L148 712 L148 758 L180 764 L140 770 L90 750 L40 720 L20 680 L12 640 L10 600 L30 560 L40 520 L44 490 L54 460 L50 430 L56 404 L68 380 L80 350 L86 320 L88 290 L90 250 L100 210 L108 170 L110 130 L118 90 L114 60 L112 26 Z'
@@ -13,25 +15,15 @@ const CIUDADES = [
 ]
 
 /**
- * Fondo del hero: patrón geométrico de líneas a la izquierda y mapa de Chile
+ * Fondo del hero: constelación animada de puntos y líneas (canvas) y mapa de Chile
  * desvanecido a la derecha. Todo decorativo (aria-hidden), colores vía currentColor
  * para que funcione en claro/oscuro.
  */
 export default function HeroBackdrop() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      {/* Patrón geométrico (izquierda) */}
-      <svg
-        className="absolute left-0 top-0 h-full w-[55%] text-[#2563EB]/[0.07] dark:text-[#3B82F6]/[0.08] [mask-image:linear-gradient(to_right,black_30%,transparent)]"
-      >
-        <defs>
-          <pattern id="hero-geo" width="64" height="64" patternUnits="userSpaceOnUse">
-            <path d="M0 32 L32 0 L64 32 L32 64 Z" fill="none" stroke="currentColor" strokeWidth="1" />
-            <path d="M32 0 V64 M0 32 H64" fill="none" stroke="currentColor" strokeWidth="0.5" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#hero-geo)" />
-      </svg>
+      {/* Constelación animada; se desvanece hacia abajo para no competir con el contenido */}
+      <FondoConstelacion className="absolute inset-0 h-full w-full [mask-image:linear-gradient(to_bottom,black_55%,transparent)]" />
 
       {/* Mapa de Chile desvanecido (derecha) */}
       <svg
