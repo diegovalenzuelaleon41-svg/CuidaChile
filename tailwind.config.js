@@ -35,6 +35,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Gabarito', 'Inter', 'system-ui', 'sans-serif'],
       },
     },
   },
