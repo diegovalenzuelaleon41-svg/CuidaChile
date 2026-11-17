@@ -13,12 +13,12 @@ interface Props {
 export default function DashboardHeader({ alertaActiva, protegido }: Props) {
   return (
     <header
-      className={`sticky top-0 z-30 border-b backdrop-blur transition-colors duration-300 ${
+      className={`sticky top-0 z-50 border-b backdrop-blur transition-colors duration-300 ${
         alertaActiva ? 'bg-sos border-sos text-white' : 'bg-white/95 border-line dark:bg-slate-900/95 dark:border-slate-700'
       }`}
     >
       <div className="mx-auto w-full max-w-6xl flex justify-between items-center gap-3 px-4 py-3">
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           <Logo size={34} textoClaro={alertaActiva} />
           <span
             className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap ${

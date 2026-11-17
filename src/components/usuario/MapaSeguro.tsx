@@ -24,7 +24,7 @@ export default function MapaSeguro({ mapRef, mapEstado, gpsEstado, detalle, onRe
     <>
       <div
         ref={mapRef}
-        className="absolute inset-0 z-0"
+        className="mapa-usuario absolute inset-0 z-0"
         style={{ position: 'absolute', inset: 0 }}
         aria-label="Mapa de tu ubicación"
       />

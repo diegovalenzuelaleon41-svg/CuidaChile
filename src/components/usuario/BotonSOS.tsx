@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Fingerprint } from 'lucide-react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
+import { Fingerprint, Siren } from 'lucide-react'
 
 /** Tiempo que hay que mantener presionado para enviar el SOS. */
 const HOLD_MS = 1500
@@ -14,6 +14,8 @@ interface Props {
   /** Ya hay una alerta abierta: un toque simple vuelve a mostrar su estado. */
   abierta?: boolean
   size?: keyof typeof TAMANOS
+  /** 'circulo' (por defecto) o 'barra': botón rectangular ancho para la barra inferior del mapa. */
+  forma?: 'circulo' | 'barra'
 }
 
 function vibrar(patron: number | number[]) {
@@ -29,7 +31,7 @@ function vibrar(patron: number | number[]) {
  * Mientras se mantiene, un anillo SVG se completa; si se suelta antes, se
  * cancela. Funciona con dedo, mouse y teclado (mantener Enter / Espacio).
  */
-export default function BotonSOS({ onActivar, abierta = false, size = 'lg' }: Props) {
+export default function BotonSOS({ onActivar, abierta = false, size = 'lg', forma = 'circulo' }: Props) {
   const { boton, trazo, texto } = TAMANOS[size]
   const anillo = boton + 14
   const radio = (anillo - trazo) / 2
@@ -98,6 +100,72 @@ export default function BotonSOS({ onActivar, abierta = false, size = 'lg' }: Pr
   // Texto secundario dentro del botón (solo lg).
   const ayuda = abierta ? 'Ver' : soltoAntes ? 'Mantén' : presionando ? 'Sigue…' : '1,5 s'
 
+  // Mismos manejadores en ambas formas: mantener 1,5 s con dedo, mouse o teclado.
+  const manejadores = {
+    onPointerDown: (e: PointerEvent<HTMLButtonElement>) => {
+      if (e.button !== 0) return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      empezar()
+    },
+    onPointerUp: soltar,
+    onPointerCancel: soltar,
+    onLostPointerCapture: soltar,
+    onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+        e.preventDefault()
+        empezar()
+      }
+    },
+    onKeyUp: (e: KeyboardEvent<HTMLButtonElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') soltar()
+    },
+    onContextMenu: (e: MouseEvent) => e.preventDefault(),
+  }
+  const etiqueta = abierta
+    ? 'Alerta SOS activa. Toca para ver su estado.'
+    : 'Botón de pánico SOS. Mantén presionado 1,5 segundos para enviar la alerta.'
+  // Lectores de pantalla: avisa si soltó antes de tiempo.
+  const avisoLector = (
+    <span className="sr-only" aria-live="polite">
+      {soltoAntes ? 'Mantén presionado 1,5 segundos para enviar la alerta.' : ''}
+    </span>
+  )
+
+  if (forma === 'barra') {
+    const ayudaBarra = abierta ? 'Ver alerta' : soltoAntes ? 'Mantén presionado' : presionando ? 'Sigue…' : 'Mantén 1,5\u00a0s'
+    return (
+      <>
+        <button
+          type="button"
+          {...manejadores}
+          aria-label={etiqueta}
+          className={`relative h-16 w-full overflow-hidden rounded-2xl border border-red-300/40 bg-red-600 text-white flex items-center justify-center gap-3 px-3 select-none touch-none [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent] shadow-[0_0_30px_rgba(220,38,38,0.6)] transition-[transform,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70 ${
+            presionando ? 'scale-[0.97] shadow-[0_0_44px_rgba(220,38,38,0.9)]' : 'hover:shadow-[0_0_40px_rgba(220,38,38,0.75)]'
+          }`}
+        >
+          {/* Progreso de la pulsación: se llena de izquierda a derecha */}
+          <span
+            className="pointer-events-none absolute inset-y-0 left-0 bg-white/25"
+            style={{ width: `${progreso * 100}%` }}
+            aria-hidden
+          />
+          <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" aria-hidden />
+          <Siren size={28} strokeWidth={2} className="relative shrink-0" aria-hidden />
+          <span className="relative flex min-w-0 flex-col items-start leading-none">
+            <span className="text-[26px] font-extrabold tracking-wider">SOS</span>
+            <span
+              className={`mt-1 truncate text-[12px] font-semibold ${soltoAntes ? 'text-amber-200' : 'text-white/90'}`}
+              aria-hidden
+            >
+              {ayudaBarra}
+            </span>
+          </span>
+        </button>
+        {avisoLector}
+      </>
+    )
+  }
+
   return (
     <div className="relative flex items-center justify-center shrink-0" style={{ width: anillo, height: anillo }}>
       {/* Halo de "respiración": se apaga mientras se presiona para que mande el anillo */}
@@ -135,29 +203,8 @@ export default function BotonSOS({ onActivar, abierta = false, size = 'lg' }: Pr
 
       <button
         type="button"
-        onPointerDown={(e) => {
-          if (e.button !== 0) return
-          e.currentTarget.setPointerCapture(e.pointerId)
-          empezar()
-        }}
-        onPointerUp={soltar}
-        onPointerCancel={soltar}
-        onLostPointerCapture={soltar}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
-            e.preventDefault()
-            empezar()
-          }
-        }}
-        onKeyUp={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') soltar()
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        aria-label={
-          abierta
-            ? 'Alerta SOS activa. Toca para ver su estado.'
-            : 'Botón de pánico SOS. Mantén presionado 1,5 segundos para enviar la alerta.'
-        }
+        {...manejadores}
+        aria-label={etiqueta}
         className={`relative rounded-full bg-[#EF4444] text-white border-2 border-white/80 flex items-center justify-center select-none touch-none [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent] shadow-[0_0_18px_rgba(239,68,68,0.75),0_8px_24px_rgba(239,68,68,0.45)] transition-transform duration-150 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70 ${
           presionando ? 'scale-95 shadow-[0_0_32px_rgba(239,68,68,1),0_8px_24px_rgba(239,68,68,0.55)]' : 'hover:scale-105'
         }`}
@@ -178,10 +225,7 @@ export default function BotonSOS({ onActivar, abierta = false, size = 'lg' }: Pr
           )}
         </span>
       </button>
-      {/* Lectores de pantalla: avisa si soltó antes de tiempo. */}
-      <span className="sr-only" aria-live="polite">
-        {soltoAntes ? 'Mantén presionado 1,5 segundos para enviar la alerta.' : ''}
-      </span>
+      {avisoLector}
     </div>
   )
 }

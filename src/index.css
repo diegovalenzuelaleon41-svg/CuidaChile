@@ -451,18 +451,19 @@ button:active > .icono-alerta {
   transform: none;
 }
 
-/* Anillo del SOS: se completa en 1,5 s cada vez que su paso se activa. */
-.anillo-sos {
-  stroke-dashoffset: 100;
+/* SOS del panel "Qué pasa cuando pides ayuda": tres anillos desfasados que se expanden como un radar. */
+.radar-sos {
+  animation: radar-sos 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
 
-[data-activa] .anillo-sos {
-  animation: anillo-sos 1500ms linear forwards;
-}
-
-@keyframes anillo-sos {
+@keyframes radar-sos {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
   to {
-    stroke-dashoffset: 0;
+    transform: scale(1.9);
+    opacity: 0;
   }
 }
 
@@ -482,12 +483,26 @@ button:active > .icono-alerta {
     transform: none !important;
   }
 
-  .anillo-sos {
-    stroke-dashoffset: 0;
-    animation: none !important;
+  .radar-sos {
+    animation: none;
+    opacity: 0;
   }
 
   .cursor-parpadeo {
     animation: none;
   }
+}
+
+/* Créditos del mapa del usuario: oscuros, a juego con CARTO Dark Matter teñido */
+.mapa-usuario .maplibregl-ctrl-attrib {
+  background: rgba(15, 23, 42, 0.8);
+  color: #94a3b8;
+}
+
+.mapa-usuario .maplibregl-ctrl-attrib a {
+  color: #93c5fd;
+}
+
+.mapa-usuario .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
 }

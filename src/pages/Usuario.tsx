@@ -7,8 +7,8 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 // Sin esto el mapa falla con "Worker failed to load" y nunca dispara 'load'.
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
-  CheckCircle2, ChevronRight, Clock3, Crosshair, KeyRound, LocateFixed, MapPin, MessageCircle,
-  Minus, Moon, Navigation, Plus, Search, ShieldCheck, Sun, Users, X,
+  Briefcase, CheckCircle2, ChevronRight, Clock3, Crosshair, Home, KeyRound, LocateFixed, MapPin, MapPinned,
+  MessageCircle, Minus, Moon, Navigation, Plus, Search, ShieldCheck, Star, Sun, X,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../hooks/useTheme'
@@ -122,7 +122,6 @@ const SANTIAGO: [number, number] = [-70.6693, -33.4489]
 // más colorido pero con más ruido visual: Positron combina mejor con el azul
 // #2563EB de CuidaChile (máximo contraste ruta/fondo). Para comparar basta
 // cambiar esta constante.
-const MAP_STYLE_CLARO = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 const MAP_STYLE_OSCURO = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 const MAP_STYLE_FALLBACK = 'https://tiles.openfreemap.org/styles/liberty'
 
@@ -135,6 +134,41 @@ interface RutaPendiente {
   origenLat: number | null
   destinoLat: number | null
   destinoLng: number | null
+}
+
+/**
+ * Tiñe CARTO Dark Matter al estilo de la app: fondo azul marino casi negro, calles en cian
+ * eléctrico tenue y agua/edificios en azules profundos. Se aplica en cada 'load'. Usa el esquema
+ * de CARTO (source-layers roads/water/buildings/landuse) y filtra por tipo, no por id exacto.
+ */
+function teñirMapa(map: maplibregl.Map) {
+  const capas = map.getStyle()?.layers ?? []
+  for (const capa of capas) {
+    const fuente = 'source-layer' in capa ? capa['source-layer'] : undefined
+    try {
+      if (capa.type === 'background') {
+        map.setPaintProperty(capa.id, 'background-color', '#050B14')
+      } else if (capa.type === 'line' && fuente === 'roads' && !/rail|aeroway/.test(capa.id)) {
+        if (/_case/.test(capa.id)) {
+          // Bordes de calle: del color del fondo, separan las líneas cian
+          map.setPaintProperty(capa.id, 'line-color', '#050B14')
+        } else {
+          // Vías principales más brillantes que las calles de barrio
+          const principal = /mot|trunk|pri/.test(capa.id)
+          map.setPaintProperty(capa.id, 'line-color', principal ? 'rgba(56,189,248,0.6)' : 'rgba(59,130,246,0.38)')
+        }
+      } else if (capa.type === 'fill' && fuente === 'water') {
+        map.setPaintProperty(capa.id, 'fill-color', '#06142B')
+      } else if (capa.type === 'line' && fuente === 'water') {
+        map.setPaintProperty(capa.id, 'line-color', '#0B2A55')
+      } else if (capa.type === 'fill' && fuente === 'buildings') {
+        map.setPaintProperty(capa.id, 'fill-color', '#0B1628')
+        try { map.setPaintProperty(capa.id, 'fill-outline-color', 'rgba(59,130,246,0.18)') } catch { /* noop */ }
+      } else if (capa.type === 'fill' && fuente === 'landuse') {
+        map.setPaintProperty(capa.id, 'fill-color', '#08111F')
+      }
+    } catch { /* capa sin esa propiedad: se deja como viene */ }
+  }
 }
 
 function uid() {
@@ -152,24 +186,9 @@ export default function Usuario() {
   // La ruta está envuelta en <Protected>: aquí siempre hay sesión.
   const { user, signOut } = useAuth()
   const { esOscuro, toggleTheme } = useTheme()
-  // Tema aplicado al estilo del mapa (evita setStyle redundantes).
-  const temaMapaRef = useRef<boolean | null>(null)
-  // Generación del estilo: cambia en cada 'load' (incluido setStyle por tema)
-  // y fuerza el redibujado de las capas propias (ruta, previa, zonas).
+  // Generación del estilo: cambia en cada 'load' y fuerza el redibujado de
+  // las capas propias (ruta, previa, zonas). El mapa es siempre oscuro.
   const [estiloKey, setEstiloKey] = useState(0)
-
-  // Cambio claro↔oscuro con mapa vivo: conserva cámara/zoom; el 'load'
-  // posterior redibuja las capas propias vía estiloKey.
-  useEffect(() => {
-    if (temaMapaRef.current === esOscuro) return
-    temaMapaRef.current = esOscuro
-    const map = mapObj.current
-    if (!map) return
-    try {
-      map.setStyle(esOscuro ? MAP_STYLE_OSCURO : MAP_STYLE_CLARO)
-    } catch { /* noop */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [esOscuro])
   const {
     rutaActiva, alertaActiva, contactos, historial,
     iniciarRuta, finalizarRuta, setAlerta, setContactos, setHistorial,
@@ -495,15 +514,12 @@ export default function Usuario() {
       } catch { /* si el check falla, intentar igual */ }
       try {
         container.innerHTML = ''
-        // Estilo según tema vigente (se lee del DOM: siempre fresco).
-        const oscuro = document.documentElement.classList.contains('dark')
-        temaMapaRef.current = oscuro
-        const estilo = mapIntento % 2 === 1
-          ? MAP_STYLE_FALLBACK
-          : oscuro ? MAP_STYLE_OSCURO : MAP_STYLE_CLARO
+        // Siempre CARTO Dark Matter (teñido en 'load'); el fallback solo si falló.
+        const esFallback = mapIntento % 2 === 1
+        const estilo = esFallback ? MAP_STYLE_FALLBACK : MAP_STYLE_OSCURO
         try {
           console.info(
-            `[mapa] crear contenedor=${container.clientWidth}x${container.clientHeight} estilo=${mapIntento % 2 === 1 ? 'fallback' : oscuro ? 'oscuro' : 'claro'}`,
+            `[mapa] crear contenedor=${container.clientWidth}x${container.clientHeight} estilo=${esFallback ? 'fallback' : 'oscuro'}`,
           )
         } catch { /* noop */ }
         const map = new maplibregl.Map({
@@ -517,22 +533,30 @@ export default function Usuario() {
         // Zoom y "centrar" son botones propios (columna derecha); los controles
         // nativos de MapLibre los duplicaban y quedaban bajo la tarjeta inferior.
         mapObj.current = map
-        // Pin de ubicación con pulso azul + etiqueta "Tú"
+        // Pin de ubicación tipo radar: 3 ondas (animate-ping desfasadas), punto azul
+        // brillante con centro blanco y etiqueta "Tú". Clases Tailwind: el escáner las ve aquí.
         const wrap = document.createElement('div')
-        wrap.style.cssText =
-          'position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center;'
-        const ripple = document.createElement('span')
-        ripple.className = 'pin-ripple'
-        ripple.style.cssText =
-          'position:absolute;width:44px;height:44px;border-radius:9999px;background:rgba(37,99,235,.3);animation-duration:2.5s;'
+        wrap.className = 'relative flex h-16 w-16 items-center justify-center'
+        for (const retraso of [0, 0.6, 1.2]) {
+          const onda = document.createElement('span')
+          onda.className = 'absolute h-8 w-8 rounded-full bg-blue-500/40 motion-safe:animate-ping'
+          onda.style.animationDelay = `${retraso}s`
+          onda.style.animationDuration = '1.8s'
+          wrap.appendChild(onda)
+        }
+        const halo = document.createElement('span')
+        halo.className = 'absolute h-12 w-12 rounded-full bg-blue-500/20 shadow-[0_0_24px_rgba(59,130,246,0.7)]'
         const dot = document.createElement('span')
-        dot.style.cssText =
-          'position:relative;width:20px;height:20px;border-radius:9999px;background:#2563EB;border:4px solid #fff;box-shadow:0 0 0 6px rgba(37,99,235,.25),0 4px 12px rgba(0,0,0,.3);'
+        dot.className =
+          'relative flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 ring-2 ring-white/90 shadow-[0_0_18px_rgba(59,130,246,0.95)]'
+        const centro = document.createElement('span')
+        centro.className = 'h-2.5 w-2.5 rounded-full bg-white'
+        dot.appendChild(centro)
         const label = document.createElement('span')
         label.textContent = 'Tú'
-        label.style.cssText =
-          'position:absolute;top:100%;left:50%;transform:translateX(-50%);background:#2563EB;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 8px;border-radius:9999px;box-shadow:0 2px 8px rgba(37,99,235,.45);white-space:nowrap;'
-        wrap.appendChild(ripple)
+        label.className =
+          'absolute left-1/2 top-[calc(100%-6px)] -translate-x-1/2 whitespace-nowrap rounded-full bg-blue-600 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-[0_0_12px_rgba(37,99,235,0.7)]'
+        wrap.appendChild(halo)
         wrap.appendChild(dot)
         wrap.appendChild(label)
         markerRef.current = new maplibregl.Marker({ element: wrap })
@@ -558,6 +582,7 @@ export default function Usuario() {
         map.on('load', () => {
           if (cancelado) return
           window.clearTimeout(timeoutEstilo)
+          if (!esFallback) teñirMapa(map)
           try { map.resize() } catch { /* noop */ }
           setMapDetalle(null)
           setMapEstado('listo')
@@ -1986,33 +2011,50 @@ export default function Usuario() {
             Dos columnas flex (arriba y abajo) en vez de coordenadas fijas: cada
             elemento se apila según su alto real y nada queda tapado. */}
         {tab === 'inicio' && (
-          <div className="absolute inset-0 z-20 pointer-events-none">
+          <div className="absolute inset-0 z-40 pointer-events-none">
             {/* ── Zona superior: búsqueda + contactos, avisos GPS, destino, reportar ── */}
             <div className="absolute inset-x-0 top-0 p-3 flex flex-col items-stretch sm:items-start gap-2">
-              <div className="pointer-events-auto sm:w-[400px] flex items-center gap-1 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)]">
+              <div className="pointer-events-auto sm:w-[400px] flex items-center gap-1 rounded-full border border-blue-400/20 bg-slate-900/80 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-md">
                 <button
                   onClick={abrirRuta}
-                  className="flex-1 min-w-0 h-11 flex items-center gap-2.5 rounded-xl px-3 text-left hover:bg-white/5 transition-colors"
+                  className="flex-1 min-w-0 h-11 flex items-center gap-3 rounded-full pl-3.5 pr-2 text-left hover:bg-white/5 transition-colors"
                   aria-label="Buscar destino"
                 >
-                  <Search size={18} className="text-[#60A5FA] shrink-0" />
+                  <Search size={20} className="text-slate-300 shrink-0" />
                   <span className={`text-[15px] truncate ${rutaActiva ? 'text-white' : 'text-slate-400'}`}>
                     {rutaActiva ? rutaActiva.destino : '¿A dónde vas?'}
                   </span>
                 </button>
-                <span className="w-px h-6 bg-white/10" aria-hidden />
                 <button
-                  onClick={() => setTab('red')}
-                  aria-label={`Ver mi círculo de confianza: ${contactos.length} de 5 contactos`}
-                  title="Mi círculo de confianza"
-                  className="relative w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+                  onClick={iniciarSeleccionEnMapa}
+                  disabled={!!rutaActiva || !mapaListo}
+                  aria-label="Elegir destino en el mapa"
+                  title="Elegir destino en el mapa"
+                  className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-40"
                 >
-                  <Users size={19} />
-                  <span className="absolute bottom-0.5 right-0 rounded-full bg-blue-600 px-1 text-[9px] font-bold leading-[14px] text-white tabular-nums ring-2 ring-slate-900">
-                    {contactos.length}/5
-                  </span>
+                  <MapPinned size={19} />
                 </button>
               </div>
+
+              {/* Accesos rápidos: abren la búsqueda de destino (aún no hay lugares guardados) */}
+              {!rutaActiva && !preview && !seleccionandoDestino && !selReporte && (
+                <div className="pointer-events-auto grid grid-cols-3 gap-2 sm:w-[400px]">
+                  {([
+                    { t: 'Casa', Icono: Home },
+                    { t: 'Trabajo', Icono: Briefcase },
+                    { t: 'Otro', Icono: Star },
+                  ] as const).map(({ t, Icono }) => (
+                    <button
+                      key={t}
+                      onClick={abrirRuta}
+                      className="h-10 flex items-center justify-center gap-2 rounded-full border border-white/10 bg-slate-900/80 text-[14px] font-medium text-slate-100 backdrop-blur-md hover:border-blue-400/40 hover:bg-slate-800/80 transition-colors"
+                    >
+                      <Icono size={17} className="text-blue-400" aria-hidden />
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {gpsEstado === 'pendiente' && (
                 <div className="pointer-events-auto sm:max-w-[400px] flex items-center gap-2 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2.5">
@@ -2128,37 +2170,38 @@ export default function Usuario() {
             {/* ── Zona inferior (pulgar): controles del mapa + una sola barra de acción.
                 El mapa termina donde empieza la navbar, así que basta un margen de 16 px. ── */}
             <div className="absolute inset-x-0 bottom-0 px-4 pb-4 flex flex-col items-stretch gap-3">
-              {/* Controles del mapa: siempre por encima de la barra, nunca tapados */}
-              <div className="pointer-events-auto self-end flex flex-col rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 shadow-[0_6px_24px_rgba(0,0,0,0.35)] overflow-hidden">
-                <button
-                  onClick={zoomIn}
-                  disabled={!mapaListo}
-                  aria-label="Acercar"
-                  title={mapaListo ? 'Acercar' : 'Mapa cargando…'}
-                  className="w-11 h-11 flex items-center justify-center text-white hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
-                >
-                  <Plus size={18} />
-                </button>
-                <span className="h-px bg-white/10" aria-hidden />
-                <button
-                  onClick={zoomOut}
-                  disabled={!mapaListo}
-                  aria-label="Alejar"
-                  title={mapaListo ? 'Alejar' : 'Mapa cargando…'}
-                  className="w-11 h-11 flex items-center justify-center text-white hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
-                >
-                  <Minus size={18} />
-                </button>
-                <span className="h-px bg-white/10" aria-hidden />
+              {/* Controles del mapa (derecha): recentrar aparte y zoom agrupado, siempre sobre la barra */}
+              <div className="pointer-events-auto self-end flex flex-col items-center gap-2.5">
                 <button
                   onClick={centrarme}
                   disabled={!mapaListo}
                   aria-label="Centrar en mi ubicación"
                   title={mapaListo ? 'Centrar en mi ubicación' : 'Mapa cargando…'}
-                  className="w-11 h-11 flex items-center justify-center text-[#60A5FA] hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
+                  className="w-12 h-12 rounded-full flex items-center justify-center border border-white/10 bg-slate-800/80 text-white backdrop-blur-md shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:bg-slate-700/80 active:bg-slate-600/80 transition-colors disabled:opacity-40"
                 >
-                  <LocateFixed size={18} />
+                  <Crosshair size={20} />
                 </button>
+                <div className="flex flex-col overflow-hidden rounded-full border border-white/10 bg-slate-800/80 backdrop-blur-md shadow-[0_6px_24px_rgba(0,0,0,0.4)]">
+                  <button
+                    onClick={zoomIn}
+                    disabled={!mapaListo}
+                    aria-label="Acercar"
+                    title={mapaListo ? 'Acercar' : 'Mapa cargando…'}
+                    className="w-12 h-12 flex items-center justify-center text-white hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
+                  >
+                    <Plus size={20} />
+                  </button>
+                  <span className="mx-2.5 h-px bg-white/10" aria-hidden />
+                  <button
+                    onClick={zoomOut}
+                    disabled={!mapaListo}
+                    aria-label="Alejar"
+                    title={mapaListo ? 'Alejar' : 'Mapa cargando…'}
+                    className="w-12 h-12 flex items-center justify-center text-white hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-40"
+                  >
+                    <Minus size={20} />
+                  </button>
+                </div>
               </div>
 
               {/* Modo "ubicar reporte": confirmar vuelve al modal con las coords */}
@@ -2258,17 +2301,31 @@ export default function Usuario() {
                     </div>
                   )}
 
-                  {/* Barra flotante única: Ruta (izquierda) + SOS (derecha, pulgar) */}
+                  {/* Estado en reposo: solo cuando no hay alerta, ruta ni solicitud en curso */}
+                  {!rutaActiva && !alertaActiva && !sos.abierta && !acomp && (
+                    <div className="pointer-events-auto w-full max-w-[440px] mx-auto flex items-center gap-3 rounded-3xl border border-emerald-400/15 bg-slate-900/80 px-4 py-3 backdrop-blur-xl">
+                      <span className="w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center bg-emerald-500/15 shadow-[0_0_18px_rgba(16,185,129,0.25)]">
+                        <ShieldCheck size={24} className="text-emerald-400" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[16px] font-bold text-white leading-tight">Estás protegido</p>
+                        <p className="mt-0.5 text-[13px] leading-snug text-slate-400">
+                          {gpsEstado === 'ok' ? 'Ubicación activa' : 'Ubicación aproximada'} · Listo para pedir ayuda
+                        </p>
+                      </div>
+                      <span className="self-start mt-1 w-2.5 h-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" aria-hidden />
+                    </div>
+                  )}
+
+                  {/* Barra flotante única: Ruta (izquierda) + SOS (derecha, pulgar), mitad y mitad */}
                   <div className="pointer-events-auto w-full max-w-[440px] mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
                     {!rutaActiva ? (
-                      <div className="flex items-center gap-2 p-2 pl-3">
-                        <div className="flex-1 min-w-0">
-                          <BotonIniciarRuta
-                            onClick={abrirRuta}
-                            buscando={solicitandoRuta || acomp?.estado === 'PENDIENTE'}
-                          />
-                        </div>
-                        <BotonSOS abierta={sos.abierta} onActivar={() => void activarSOS()} />
+                      <div className="grid grid-cols-2 gap-2.5 p-2.5">
+                        <BotonIniciarRuta
+                          onClick={abrirRuta}
+                          buscando={solicitandoRuta || acomp?.estado === 'PENDIENTE'}
+                        />
+                        <BotonSOS forma="barra" abierta={sos.abierta} onActivar={() => void activarSOS()} />
                       </div>
                     ) : (
                       <div className="p-3.5">
