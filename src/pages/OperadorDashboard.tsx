@@ -195,7 +195,11 @@ function acompanamientoAAlerta(a: Acompanamiento): Alerta {
   const timeline = [`${horaDe(a.creado_en)} - Solicitud de acompañamiento recibida`]
   if (a.aceptado_en) timeline.push(`${horaDe(a.aceptado_en)} - Aceptaste el monitoreo`)
   if (a.finalizado_en) timeline.push(`${horaDe(a.finalizado_en)} - Acompañamiento finalizado`)
-  const sinUbicacion = a.lat_actual == null || a.lng_actual == null
+  // Sin GPS en vivo (p. ej. recién solicitado con ubicación aproximada): se dibuja en el
+  // punto de partida de su ruta para que la solicitud aparezca en el mapa desde el primer momento.
+  const sinGps = a.lat_actual == null || a.lng_actual == null
+  const soloOrigen = sinGps && a.origen_lat != null && a.origen_lng != null
+  const sinUbicacion = sinGps && !soloOrigen
   const rutaCoords =
     a.origen_lat != null && a.origen_lng != null && a.destino_lat != null && a.destino_lng != null
       ? {
@@ -209,9 +213,10 @@ function acompanamientoAAlerta(a: Acompanamiento): Alerta {
     nombre: a.usuario_nombre ?? 'Usuario CuidaChile',
     telefono: a.usuario_telefono ?? '',
     hora: horaDe(a.creado_en),
-    lat: a.lat_actual ?? SANTIAGO_CENTRO.lat,
-    lng: a.lng_actual ?? SANTIAGO_CENTRO.lng,
+    lat: a.lat_actual ?? a.origen_lat ?? SANTIAGO_CENTRO.lat,
+    lng: a.lng_actual ?? a.origen_lng ?? SANTIAGO_CENTRO.lng,
     sinUbicacion,
+    soloOrigen,
     rutaCoords,
     creadoEn: a.creado_en,
     aceptadoEn: a.aceptado_en ?? undefined,
@@ -295,7 +300,7 @@ function grupoBarrialAAlerta(grupo: ReporteOperador[]): Alerta {
  * significan señal perdida (no "persona quieta").
  */
 function segundosSinSenal(a: Alerta, esReal: boolean, ahora: number): number | null {
-  if (!esReal || a.sinUbicacion || !a.actualizadoEn || a.estado === 'RESUELTA') return null
+  if (!esReal || a.sinUbicacion || a.soloOrigen || !a.actualizadoEn || a.estado === 'RESUELTA') return null
   if (a.tipo === 'ACOMPANAMIENTO' && a.estado !== 'EN_PROCESO') return null
   const ms = ahora - Date.parse(a.actualizadoEn)
   return ms > SENAL_PERDIDA_MS ? Math.floor(ms / 1000) : null
@@ -833,13 +838,17 @@ export default function OperadorDashboard() {
                       <span className="flex items-center gap-1.5 font-semibold text-orange-400 animate-pulse">
                         <TriangleAlert size={13} /> Señal perdida hace {textoDuracionCorta(sinSenal(sel)!)} · última ubicación conocida
                       </span>
-                    ) : esEnVivo(sel) && !sel.sinUbicacion ? (
+                    ) : esEnVivo(sel) && !sel.sinUbicacion && !sel.soloOrigen ? (
                       <>
                         <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse" aria-hidden />
                         Ubicación en vivo: {sel.actualizadoEn && horaLarga(sel.actualizadoEn)}
                       </>
                     ) : sel.sinUbicacion ? (
                       'Sin ubicación GPS todavía'
+                    ) : sel.soloOrigen ? (
+                      sel.estado === 'PENDIENTE'
+                        ? 'En el mapa: punto de partida. Acepta el monitoreo para seguir su ubicación en vivo'
+                        : 'En el mapa: punto de partida. Esperando su GPS en vivo'
                     ) : sel.estado === 'PENDIENTE' ? (
                       esSOSReal ? 'Atiende la alerta para seguir su ubicación en vivo' : 'Acepta el monitoreo para seguir su ubicación en vivo'
                     ) : null}

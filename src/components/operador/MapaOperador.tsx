@@ -66,6 +66,14 @@ function agregarContador(cuerpo: HTMLElement, cantidad: number | undefined, colo
 }
 
 /**
+ * Forma por tipo, para distinguirlos sin depender solo del color:
+ * SOS y acompañamiento son círculos; el reporte barrial es un rombo.
+ */
+function forma(tipo: AlertaTipo) {
+  return tipo === 'BARRIAL' ? 'border-radius:5px;transform:rotate(45deg) scale(0.86);' : 'border-radius:9999px;'
+}
+
+/**
  * Pin neón. MapLibre posiciona el elemento EXTERNO con transform/position
  * absolute: todo el estilo y las animaciones van en hijos, si no el pin
  * se sale de su coordenada (o queda fuera del canvas).
@@ -79,7 +87,7 @@ function crearPin(tipo: AlertaTipo, enVivo: boolean, cantidad?: number) {
 
   // Halo exterior fijo: separa el pin del fondo oscuro aunque no pulse.
   const halo = document.createElement('div')
-  halo.style.cssText = `position:absolute;inset:-10px;border-radius:9999px;background:${color}33;box-shadow:0 0 24px ${color}66;`
+  halo.style.cssText = `position:absolute;inset:-10px;${forma(tipo)}background:${color}33;box-shadow:0 0 24px ${color}66;`
   el.appendChild(halo)
 
   if (tipo === 'SOS' || enVivo) {
@@ -91,7 +99,7 @@ function crearPin(tipo: AlertaTipo, enVivo: boolean, cantidad?: number) {
 
   const punto = document.createElement('div')
   punto.style.cssText =
-    `position:absolute;inset:0;border-radius:9999px;background:${color};` +
+    `position:absolute;inset:0;${forma(tipo)}background:${color};` +
     `border:3px solid #FFFFFF;box-shadow:0 0 15px ${color},0 0 32px ${color}99;`
   el.appendChild(punto)
 
@@ -137,7 +145,7 @@ function crearPinBandeja(p: PuntoMapa, onClick: () => void) {
   }
   const punto = document.createElement('div')
   punto.style.cssText =
-    `position:absolute;inset:0;border-radius:9999px;background:${color};` +
+    `position:absolute;inset:0;${forma(p.tipo)}background:${color};` +
     `border:2px solid #FFFFFF;box-shadow:0 0 10px ${color},0 0 20px ${color}88;`
   cuerpo.appendChild(punto)
   agregarContador(cuerpo, p.cantidad, color)
@@ -449,6 +457,29 @@ export default function MapaOperador({ seleccion, puntos = [], onSeleccionar, ru
           </div>
         )}
       </div>
+
+      {/* Leyenda: forma y color de cada tipo de caso */}
+      <ul
+        aria-label="Leyenda del mapa"
+        className="absolute top-3 right-3 z-20 flex flex-col gap-1.5 rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-[11px] font-medium text-slate-200 backdrop-blur"
+      >
+        {(
+          [
+            ['SOS', 'SOS', 'rounded-full'],
+            ['ACOMPANAMIENTO', 'Acompañamiento', 'rounded-full'],
+            ['BARRIAL', 'Reporte barrial', 'rounded-[2px] rotate-45 scale-[0.85]'],
+          ] as const
+        ).map(([tipo, texto, clase]) => (
+          <li key={tipo} className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 shrink-0 border-[1.5px] border-white ${clase}`}
+              style={{ background: NEON[tipo], boxShadow: `0 0 6px ${NEON[tipo]}` }}
+              aria-hidden
+            />
+            {texto}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

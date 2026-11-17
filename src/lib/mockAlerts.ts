@@ -31,6 +31,8 @@ export interface Alerta {
   ruta?: string
   /** Acompañamiento real aún sin GPS: lat/lng son un valor por defecto y no se dibuja pin. */
   sinUbicacion?: boolean
+  /** Acompañamiento sin GPS en vivo todavía: lat/lng son el punto de partida de su ruta. */
+  soloOrigen?: boolean
   /** Última actualización (ISO) — acompañamientos reales. */
   actualizadoEn?: string
   /** Acompañamientos reales: cuándo se solicitó y cuándo se aceptó (ISO). */
