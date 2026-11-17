@@ -14,6 +14,7 @@ import Cifras from '../components/landing/Cifras'
 import Testimonios from '../components/landing/Testimonios'
 import Privacidad from '../components/landing/Privacidad'
 import ContadorEnVivo from '../components/landing/ContadorEnVivo'
+import Guardianes from '../components/landing/Guardianes'
 import { useParallax } from '../hooks/useParallax'
 
 /** Solo datos que la app cumple hoy (ver Funciones y QuienResponde). */
@@ -146,6 +147,8 @@ export default function Landing() {
         <Privacidad />
         {/* Sin testimonios reales no se muestra en producción (ver REALES en Testimonios.tsx) */}
         <Testimonios />
+        {/* Sin operadores reales no se muestra en producción (ver REALES en Guardianes.tsx) */}
+        <Guardianes />
         <CtaFinal />
       </main>
       <Footer />

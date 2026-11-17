@@ -1,5 +1,6 @@
 import { CheckCircle2, Headphones, Lock, Megaphone, Route, Users, Zap, type LucideIcon } from 'lucide-react'
 import { useEnVista } from '../../hooks/useEnVista'
+import PalabrasCineticas from './PalabrasCineticas'
 
 const FUNCIONES: { t: string; d: string; Icono: LucideIcon | null }[] = [
   {
@@ -48,6 +49,7 @@ export default function Funciones() {
       {/* Fondo: resplandor azul arriba a la izquierda */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_45%_at_20%_25%,rgba(37,99,235,0.14),transparent_70%)]" />
+        <PalabrasCineticas />
       </div>
 
       <div
