@@ -1,4 +1,4 @@
-import { CheckCircle2, Headphones, Lock, Megaphone, Route, ShieldCheck, Users, Zap, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, Headphones, Lock, Megaphone, Route, Users, Zap, type LucideIcon } from 'lucide-react'
 import { useEnVista } from '../../hooks/useEnVista'
 
 const FUNCIONES: { t: string; d: string; Icono: LucideIcon | null }[] = [
@@ -35,23 +35,6 @@ const INDICADORES: { Icono: LucideIcon; texto: string }[] = [
   { Icono: Users, texto: 'Operadores humanos' },
 ]
 
-/** Escudo con check, brillo azul y anillos orbitales planos debajo. Decorativo. */
-function EscudoConfianza() {
-  return (
-    <div className="relative mx-auto flex h-40 w-56 items-center justify-center lg:mx-0" aria-hidden>
-      {/* Anillos orbitales: elipses planas concéntricas bajo el escudo */}
-      <div className="absolute bottom-3 left-1/2 h-12 w-56 -translate-x-1/2 rounded-[50%] border border-blue-400/20" />
-      <div className="absolute bottom-6 left-1/2 h-8 w-40 -translate-x-1/2 rounded-[50%] border border-blue-400/30 shadow-[0_0_20px_rgba(59,130,246,0.25)]" />
-      <div className="absolute bottom-4 left-1/2 h-10 w-36 -translate-x-1/2 rounded-full bg-blue-500/25 blur-2xl" />
-      <ShieldCheck
-        size={112}
-        strokeWidth={1.25}
-        className="float-card relative fill-blue-500/20 text-sky-300 drop-shadow-[0_0_30px_rgba(59,130,246,0.6)]"
-      />
-    </div>
-  )
-}
-
 /** "Para el camino de todos los días": las 4 funciones de uso diario. Siempre oscura. */
 export default function Funciones() {
   const [ref, visto] = useEnVista<HTMLDivElement>()
@@ -59,30 +42,12 @@ export default function Funciones() {
   return (
     <section
       id="funciones"
-      className="relative isolate scroll-mt-20 overflow-hidden bg-[#050B14] px-5 py-20 md:px-8 md:pb-40 md:pt-28"
+      className="relative isolate scroll-mt-20 overflow-hidden bg-[#050B14] px-5 py-20 md:px-8 md:py-28"
       aria-labelledby="titulo-funciones"
     >
-      {/* Fondo: resplandor azul arriba a la izquierda y ondas de horizonte abajo */}
+      {/* Fondo: resplandor azul arriba a la izquierda */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_45%_at_20%_25%,rgba(37,99,235,0.14),transparent_70%)]" />
-        <svg viewBox="0 0 1440 220" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 hidden h-[220px] w-full md:block">
-          <defs>
-            <linearGradient id="onda-funciones" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.7" />
-              <stop offset="50%" stopColor="#3B82F6" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.6" />
-            </linearGradient>
-            <linearGradient id="bruma-funciones" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#1D4ED8" stopOpacity="0" />
-              <stop offset="100%" stopColor="#1D4ED8" stopOpacity="0.22" />
-            </linearGradient>
-          </defs>
-          <path d="M0 110 C 260 60, 520 200, 820 150 S 1260 60, 1440 120 L1440 220 L0 220 Z" fill="url(#bruma-funciones)" />
-          <path d="M0 110 C 260 60, 520 200, 820 150 S 1260 60, 1440 120" fill="none" stroke="url(#onda-funciones)" strokeWidth="1.5" />
-          <path d="M0 150 C 300 110, 560 220, 860 180 S 1240 100, 1440 160" fill="none" stroke="url(#onda-funciones)" strokeWidth="1" opacity="0.5" />
-        </svg>
-        {/* Funde con el CTA (#0B1120) */}
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-[#0B1120]" />
       </div>
 
       <div
@@ -92,24 +57,13 @@ export default function Funciones() {
       >
         {/* Izquierda (móvil: arriba): escudo, título e indicadores */}
         <div className="revelar text-center lg:col-span-5 lg:text-left">
-          <EscudoConfianza />
-
-          <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-slate-900/60 px-4 py-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-blue-200">
-            <ShieldCheck size={15} strokeWidth={2.25} className="text-blue-400" aria-hidden />
-            Seguridad y confianza
-          </span>
-
           <h2
             id="titulo-funciones"
-            className="mt-5 text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
+            className="text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
           >
             Para el camino
             <br />
-            de todos los{' '}
-            {/* inline-block + pb: el degradado recortado al texto no corta la í */}
-            <span className="inline-block bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text pb-[0.08em] text-transparent">
-              días
-            </span>
+            de todos los días
           </h2>
 
           <p className="mx-auto mt-5 max-w-[38ch] text-[17px] leading-relaxed text-slate-300 lg:mx-0">

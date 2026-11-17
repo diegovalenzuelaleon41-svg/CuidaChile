@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T22:30:00-03:00",
+  "title": "Design System: CuidaChile",
+  "extensions": {
+    "colorMeta": {
+      "night-base": { "role": "neutral", "displayName": "Noche base", "tonalRamp": ["#020409", "#050B14", "#0A1128", "#0F172A", "#1E293B", "#334155", "#64748B", "#94A3B8"] },
+      "night-raised": { "role": "neutral", "displayName": "Noche elevada", "tonalRamp": ["#050B14", "#0A1128", "#111A3A", "#1A2550", "#253366", "#3B4A82", "#6372A6", "#99A3C7"] },
+      "night-footer": { "role": "neutral", "displayName": "Noche del pie", "tonalRamp": ["#050B14", "#0B1120", "#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8"] },
+      "glass-surface": { "role": "neutral", "displayName": "Cristal", "tonalRamp": ["#020617", "#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1"] },
+      "control-surface": { "role": "neutral", "displayName": "Control", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"] },
+      "streetlight-blue": { "role": "primary", "displayName": "Azul alumbrado", "tonalRamp": ["#1E3A8A", "#1E40AF", "#1D4ED8", "#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#DBEAFE"] },
+      "action-blue": { "role": "primary", "displayName": "Azul acción", "tonalRamp": ["#1E3A8A", "#1E40AF", "#1D4ED8", "#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#DBEAFE"] },
+      "action-blue-deep": { "role": "primary", "displayName": "Azul acción profundo", "tonalRamp": ["#172554", "#1E3A8A", "#1E40AF", "#1D4ED8", "#2563EB", "#3B82F6", "#93C5FD", "#DBEAFE"] },
+      "glow-blue-soft": { "role": "primary", "displayName": "Resplandor azul suave", "tonalRamp": ["#1D4ED8", "#2563EB", "#3B82F6", "#60A5FA", "#7DB4FB", "#93C5FD", "#BFDBFE", "#DBEAFE"] },
+      "glow-blue-text": { "role": "primary", "displayName": "Texto azul luminoso", "tonalRamp": ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#A9CFFD", "#BFDBFE", "#DBEAFE", "#EFF6FF"] },
+      "sos-red": { "role": "secondary", "displayName": "Rojo SOS", "tonalRamp": ["#450A0A", "#7F1D1D", "#991B1B", "#B91C1C", "#DC2626", "#EF4444", "#F87171", "#FECACA"] },
+      "sos-red-bright": { "role": "secondary", "displayName": "Rojo SOS encendido", "tonalRamp": ["#7F1D1D", "#991B1B", "#B91C1C", "#DC2626", "#EF4444", "#F87171", "#FCA5A5", "#FEE2E2"] },
+      "safe-green": { "role": "tertiary", "displayName": "Verde a salvo", "tonalRamp": ["#022C22", "#064E3B", "#065F46", "#047857", "#059669", "#10B981", "#34D399", "#D1FAE5"] },
+      "safe-green-text": { "role": "tertiary", "displayName": "Verde a salvo (texto)", "tonalRamp": ["#065F46", "#047857", "#059669", "#10B981", "#34D399", "#6EE7B7", "#A7F3D0", "#ECFDF5"] },
+      "caution-amber": { "role": "tertiary", "displayName": "Ámbar precaución", "tonalRamp": ["#451A03", "#78350F", "#92400E", "#B45309", "#D97706", "#F59E0B", "#FBBF24", "#FEF3C7"] },
+      "text-primary": { "role": "neutral", "displayName": "Texto principal", "tonalRamp": ["#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0", "#F1F5F9", "#F8FAFC", "#FCFDFE", "#FFFFFF"] },
+      "text-body": { "role": "neutral", "displayName": "Texto de lectura", "tonalRamp": ["#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0", "#F1F5F9", "#F8FAFC"] },
+      "text-secondary": { "role": "neutral", "displayName": "Texto secundario", "tonalRamp": ["#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0", "#F1F5F9"] },
+      "text-faint": { "role": "neutral", "displayName": "Texto tenue", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"] },
+      "hero-cyan": { "role": "primary", "displayName": "Cian del hero", "tonalRamp": ["#164E63", "#155E75", "#0E7490", "#0891B2", "#06B6D4", "#22D3EE", "#67E8F9", "#CFFAFE"] },
+      "hero-violet": { "role": "primary", "displayName": "Violeta del hero", "tonalRamp": ["#3B0764", "#581C87", "#6B21A8", "#7E22CE", "#9333EA", "#A855F7", "#C084FC", "#F3E8FF"] },
+      "day-canvas": { "role": "neutral", "displayName": "Lienzo de día", "tonalRamp": ["#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0", "#F1F5F9", "#F8FAFC", "#FCFDFE", "#FFFFFF"] },
+      "day-line": { "role": "neutral", "displayName": "Línea de día", "tonalRamp": ["#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0", "#F1F5F9", "#F8FAFC", "#FFFFFF"] },
+      "day-heading": { "role": "neutral", "displayName": "Título de día", "tonalRamp": ["#020617", "#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1"] },
+      "day-ink": { "role": "neutral", "displayName": "Tinta de día", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Solo el h1 del hero; 44px en móvil." },
+      "headline": { "displayName": "Headline", "purpose": "Títulos de sección; 38px en móvil." },
+      "title": { "displayName": "Title", "purpose": "Títulos de tarjetas, pasos y garantías." },
+      "body": { "displayName": "Body", "purpose": "Párrafos de introducción en text-body, 38–52ch." },
+      "body-small": { "displayName": "Body small", "purpose": "Descripciones de tarjetas en text-secondary." },
+      "label": { "displayName": "Label", "purpose": "Solo el badge del hero, en mayúsculas." }
+    },
+    "shadows": [
+      { "name": "glow-active", "value": "0 0 20px rgba(59,130,246,0.15)", "purpose": "Tarjeta o paso activo (hasta 0 0 30px rgba(59,130,246,0.25))." },
+      { "name": "glow-action", "value": "0 0 28px rgba(59,130,246,0.45)", "purpose": "Botones primarios en reposo." },
+      { "name": "glow-action-hover", "value": "0 0 40px rgba(59,130,246,0.65)", "purpose": "Botones primarios en hover." },
+      { "name": "glow-sos", "value": "0 0 30px rgba(220,38,38,0.6)", "purpose": "Botón SOS de la app." },
+      { "name": "glow-sos-hero", "value": "0 0 80px rgba(239,68,68,0.4)", "purpose": "SOS grande de la landing." },
+      { "name": "contact-float", "value": "0 20px 50px rgba(0,0,0,0.5)", "purpose": "Barras y paneles flotando sobre el mapa." }
+    ],
+    "motion": [
+      { "name": "ease-out-strong", "value": "cubic-bezier(0.23, 1, 0.32, 1)", "purpose": "Transiciones de estado, revelado de secciones y cambio de vista por paso." },
+      { "name": "duration-press", "value": "150ms", "purpose": "Presión de botones (escala 0.97–0.98)." },
+      { "name": "duration-state", "value": "200ms", "purpose": "Hover de botones y tarjetas." },
+      { "name": "duration-reveal", "value": "600ms", "purpose": "Entrada de secciones (.revelar)." },
+      { "name": "radar-sos", "value": "2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite", "purpose": "Anillos de radar del SOS, desfasados 0.8s." },
+      { "name": "sos-hold", "value": "1500ms", "purpose": "Tiempo de pulsación para enviar el SOS." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal de la landing: Comenzar ahora, Crear mi cuenta.",
+      "html": "<button class=\"ds-btn-primary\">Comenzar ahora <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; padding: 16px 32px; border: none; border-radius: 9999px; background: linear-gradient(to bottom, #3B82F6, #1D4ED8); color: #fff; font: 600 16px/1 Inter, system-ui, sans-serif; box-shadow: 0 0 28px rgba(59,130,246,0.45); cursor: pointer; transition: transform 200ms cubic-bezier(0.23,1,0.32,1), box-shadow 200ms cubic-bezier(0.23,1,0.32,1); } .ds-btn-primary:hover { transform: scale(1.02); box-shadow: 0 0 40px rgba(59,130,246,0.65); } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(255,255,255,0.6), 0 0 28px rgba(59,130,246,0.45); }"
+    },
+    {
+      "name": "Botón fantasma",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Acción secundaria: Ver cómo funciona.",
+      "html": "<button class=\"ds-btn-ghost\"><span class=\"ds-btn-ghost-play\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M6 3l14 9-14 9V3z\"/></svg></span>Ver cómo funciona</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; gap: 12px; padding: 16px 28px; border: 1px solid rgba(96,165,250,0.6); border-radius: 9999px; background: transparent; color: #fff; font: 600 16px/1 Inter, system-ui, sans-serif; cursor: pointer; transition: border-color 200ms, box-shadow 200ms, background-color 200ms; } .ds-btn-ghost-play { display: flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 1px solid rgba(147,197,253,0.7); border-radius: 9999px; } .ds-btn-ghost:hover { border-color: #93C5FD; background: rgba(59,130,246,0.1); box-shadow: 0 0 24px rgba(59,130,246,0.45); } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(255,255,255,0.6); }"
+    },
+    {
+      "name": "Botón SOS",
+      "kind": "custom",
+      "refersTo": "button-sos",
+      "description": "Pedido de ayuda: mantener presionado 1,5 s. El único elemento rojo del sistema.",
+      "html": "<button class=\"ds-btn-sos\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 18v-6a5 5 0 1 1 10 0v6\"/><path d=\"M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z\"/><path d=\"M21 12h1\"/><path d=\"M18.5 4.5 18 5\"/><path d=\"M2 12h1\"/><path d=\"M12 2v1\"/><path d=\"m4.929 4.929.707.707\"/><path d=\"M12 12v6\"/></svg><span class=\"ds-btn-sos-text\"><strong>SOS</strong><small>Mantén 1,5&nbsp;s</small></span></button>",
+      "css": ".ds-btn-sos { display: flex; width: 200px; height: 64px; align-items: center; justify-content: center; gap: 12px; border: 1px solid rgba(252,165,165,0.4); border-radius: 16px; background: #DC2626; color: #fff; box-shadow: 0 0 30px rgba(220,38,38,0.6); cursor: pointer; user-select: none; transition: transform 150ms, box-shadow 150ms; } .ds-btn-sos-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; font-family: Inter, system-ui, sans-serif; } .ds-btn-sos-text strong { font-size: 26px; font-weight: 800; letter-spacing: 0.05em; } .ds-btn-sos-text small { margin-top: 4px; font-size: 12px; font-weight: 600; opacity: 0.9; } .ds-btn-sos:hover { box-shadow: 0 0 40px rgba(220,38,38,0.75); } .ds-btn-sos:active { transform: scale(0.97); box-shadow: 0 0 44px rgba(220,38,38,0.9); } .ds-btn-sos:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(255,255,255,0.7), 0 0 30px rgba(220,38,38,0.6); }"
+    },
+    {
+      "name": "Tarjeta de cristal",
+      "kind": "card",
+      "refersTo": "card-glass",
+      "description": "Función o paso; la versión activa lleva borde y brillo azul.",
+      "html": "<div class=\"ds-card ds-card-active\"><span class=\"ds-card-icon\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"6\" cy=\"19\" r=\"3\"/><path d=\"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15\"/><circle cx=\"18\" cy=\"5\" r=\"3\"/></svg></span><div><h3>Acompañamiento en ruta</h3><p>Marcas a dónde vas y un operador sigue tu trayecto en vivo hasta que llegas.</p></div></div>",
+      "css": ".ds-card { display: flex; gap: 16px; align-items: center; padding: 20px; border: 1px solid #1E293B; border-radius: 16px; background: rgba(15,23,42,0.4); backdrop-filter: blur(12px); font-family: Inter, system-ui, sans-serif; transition: transform 200ms cubic-bezier(0.23,1,0.32,1), border-color 200ms, box-shadow 200ms; } .ds-card-active { border-color: rgba(59,130,246,0.5); background: rgba(15,23,42,0.6); box-shadow: 0 0 20px rgba(59,130,246,0.15); } .ds-card:hover { transform: translateY(-2px); border-color: rgba(96,165,250,0.7); box-shadow: 0 0 28px rgba(59,130,246,0.25); } .ds-card-icon { display: flex; width: 48px; height: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 12px; background: #1E293B; color: #93C5FD; } .ds-card h3 { margin: 0; color: #fff; font-size: 18px; font-weight: 700; } .ds-card p { margin: 4px 0 0; color: #94A3B8; font-size: 15px; line-height: 1.6; }"
+    },
+    {
+      "name": "Buscador",
+      "kind": "input",
+      "refersTo": "search-pill",
+      "description": "Búsqueda de destino flotando sobre el mapa.",
+      "html": "<label class=\"ds-search\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input placeholder=\"¿A dónde vas?\" /></label>",
+      "css": ".ds-search { display: flex; width: 340px; height: 56px; align-items: center; gap: 12px; padding: 0 20px; border: 1px solid rgba(96,165,250,0.2); border-radius: 9999px; background: rgba(15,23,42,0.8); backdrop-filter: blur(12px); color: #CBD5E1; box-shadow: 0 8px 28px rgba(0,0,0,0.45); transition: border-color 200ms, box-shadow 200ms; } .ds-search input { flex: 1; border: none; background: transparent; color: #fff; font: 400 15px Inter, system-ui, sans-serif; outline: none; } .ds-search input::placeholder { color: #94A3B8; } .ds-search:focus-within { border-color: rgba(96,165,250,0.6); box-shadow: 0 0 0 4px rgba(59,130,246,0.2), 0 8px 28px rgba(0,0,0,0.45); }"
+    },
+    {
+      "name": "Chip de acceso rápido",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Casa, Trabajo, Otro bajo el buscador.",
+      "html": "<button class=\"ds-chip\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\"/><path d=\"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/></svg>Casa</button>",
+      "css": ".ds-chip { display: inline-flex; height: 40px; align-items: center; gap: 8px; padding: 0 18px; border: 1px solid rgba(255,255,255,0.1); border-radius: 9999px; background: rgba(15,23,42,0.8); color: #F1F5F9; font: 500 14px Inter, system-ui, sans-serif; cursor: pointer; transition: border-color 200ms, background-color 200ms; } .ds-chip svg { color: #60A5FA; } .ds-chip:hover { border-color: rgba(96,165,250,0.4); background: rgba(30,41,59,0.8); } .ds-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.5); }"
+    },
+    {
+      "name": "Navbar de la app",
+      "kind": "nav",
+      "refersTo": "",
+      "description": "Navegación inferior; el ítem activo lleva una línea azul luminosa.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\"/><path d=\"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/></svg>Inicio</a><a class=\"ds-nav-item\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>Red</a></nav>",
+      "css": ".ds-nav { display: grid; grid-template-columns: repeat(2, 120px); border-top: 1px solid #334155; background: rgba(15,23,42,0.95); font-family: Inter, system-ui, sans-serif; } .ds-nav-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; color: #64748B; font-size: 11px; font-weight: 600; text-decoration: none; cursor: pointer; transition: color 200ms; } .ds-nav-item:hover { color: #CBD5E1; } .ds-nav-active { color: #93C5FD; background: linear-gradient(to top, rgba(59,130,246,0.1), transparent); } .ds-nav-active::after { content: ''; position: absolute; bottom: 0; left: 50%; width: 40px; height: 3px; transform: translateX(-50%); border-radius: 9999px; background: #3B82F6; box-shadow: 0 0 10px 2px rgba(59,130,246,0.7); }"
+    },
+    {
+      "name": "Badge Protegido",
+      "kind": "chip",
+      "refersTo": "status-badge-safe",
+      "description": "Estado del usuario en el header de la app.",
+      "html": "<span class=\"ds-badge-safe\"><span class=\"ds-badge-dot\"></span>Protegido</span>",
+      "css": ".ds-badge-safe { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(16,185,129,0.15); color: #6EE7B7; font: 600 12px Inter, system-ui, sans-serif; } .ds-badge-dot { width: 8px; height: 8px; border-radius: 9999px; background: #34D399; box-shadow: 0 0 8px rgba(52,211,153,0.9); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La ciudad de noche",
+    "overview": "CuidaChile se ve como Santiago a oscuras visto desde arriba: un fondo azul noche casi negro, calles que brillan en cian tenue y una interfaz que funciona como alumbrado público. La luz azul orienta y acompaña: marca el camino, el estado activo, la acción siguiente. Encima de esa calma hay una sola señal de alarma, el rojo del SOS, que es lo único cálido de la pantalla y por eso se encuentra sin buscarlo.\n\nEl sistema es oscuro por diseño, no por moda: se usa de noche, en la calle, con una mano y poca atención, y una pantalla clara deslumbra y delata. La densidad es baja y los objetivos grandes. Cada superficie es cristal oscuro sobre la noche, y la profundidad viene de la luz que emiten los elementos, no de sombras grises. La landing lleva el mismo mundo que la app: lo que se promete afuera es lo que se ve adentro.\n\nLo que el sistema rechaza: la acumulación de efectos neón que compiten entre sí (constelaciones, órbitas, escudos holográficos y degradados en cada título). Se probó y se retiró. La noche es silenciosa y la luz se reserva para lo que importa.",
+    "keyCharacteristics": [
+      "Noche azul casi negra (`night-base`) como suelo de todo.",
+      "Azul alumbrado para la interfaz y rojo SOS como único acento cálido.",
+      "Superficies de cristal oscuro translúcido con borde de luz tenue.",
+      "Profundidad por resplandor de color, no por sombra.",
+      "Inter en todos los niveles; los títulos son pesados y compactos.",
+      "Objetivos táctiles grandes y acciones críticas en la zona del pulgar."
+    ],
+    "rules": [
+      { "name": "La Regla de la Única Señal", "body": "El rojo es solo para pedir ayuda. Si un elemento rojo no es el SOS, la alerta o su eco, sobra.", "section": "colors" },
+      { "name": "La Regla del Alumbrado", "body": "El azul guía, no decora: cada azul en pantalla marca algo que se puede tocar, algo activo o el lugar donde estás.", "section": "colors" },
+      { "name": "La Regla del Único Degradado", "body": "El degradado de color en el texto (`hero-cyan` → `streetlight-blue` → `hero-violet`) existe una sola vez, en \"siempre contigo.\" del hero. Ningún otro título lo usa.", "section": "colors" },
+      { "name": "La Regla de la Señalética", "body": "Los títulos van en Inter 800 con tracking −0.03em, en blanco puro, sin acentuar palabras sueltas con color o cursiva.", "section": "typography" },
+      { "name": "La Regla de la Luz Propia", "body": "Un elemento se eleva emitiendo luz de su propio color, nunca con una sombra gris. Si hay que elegir, gana el brillo.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** usar `night-base` como suelo de todas las superficies oscuras y dar volumen con degradados radiales hacia `night-raised`.",
+      "**Do** reservar el rojo SOS para pedir ayuda: el botón, la alerta activa y su eco.",
+      "**Do** marcar lo activo con luz azul (borde al 50 % y brillo de 15–30 % de opacidad) en lugar de un relleno sólido.",
+      "**Do** mantener las acciones críticas en la zona del pulgar, con objetivos de 48px como mínimo y 64px para Ruta y SOS.",
+      "**Do** apagar animaciones decorativas con `prefers-reduced-motion` y animar solo propiedades nombradas (nunca `transition: all`).",
+      "**Do** mostrar en la landing la interfaz real de la app, con el mismo mapa, pin y barra de acciones."
+    ],
+    "donts": [
+      "**Don't** acumular efectos neón: nada de constelaciones, órbitas, escudos holográficos ni horizontes en más de una sección. El hero puede tener la malla y un horizonte; el resto de las secciones van limpias.",
+      "**Don't** aplicar degradado de color a palabras sueltas en los títulos fuera del hero.",
+      "**Don't** poner una píldora en mayúsculas sobre cada título de sección.",
+      "**Don't** usar violeta como color de interfaz; aparece solo al final del degradado del hero.",
+      "**Don't** usar sombras grises para elevar sobre la noche; usa brillo de color.",
+      "**Don't** mostrar cifras o estados que el producto no cumple, como tiempos de respuesta promedio, aunque sean decorativos."
+    ]
+  }
+}

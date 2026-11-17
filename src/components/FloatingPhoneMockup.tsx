@@ -1,48 +1,27 @@
 import { useRef, type MouseEvent } from 'react'
-import { Shield, ShieldCheck, Timer, Footprints, MapPin, Share2, Search, Plus } from 'lucide-react'
+import {
+  Bell, Briefcase, Crosshair, History, Home, MapPinned, Minus, Plus, Search, ShieldCheck, Siren, Star, User, Users,
+} from 'lucide-react'
 
 const MAX_TILT = 7
 
-/** Puntos bokeh desenfocados alrededor del teléfono: [left%, top%, tamaño px, color, blur px]. */
-const BOKEH: [number, number, number, string, number][] = [
-  [6, 18, 10, 'bg-[#3B82F6]/40', 2],
-  [14, 62, 6, 'bg-[#94A3B8]/50', 1],
-  [4, 84, 14, 'bg-[#3B82F6]/25', 4],
-  [24, 92, 8, 'bg-[#94A3B8]/40', 2],
-  [30, 6, 6, 'bg-[#3B82F6]/50', 1],
-  [70, 4, 12, 'bg-[#94A3B8]/35', 3],
-  [94, 30, 8, 'bg-[#3B82F6]/45', 2],
-  [88, 50, 16, 'bg-[#3B82F6]/20', 5],
-  [97, 66, 6, 'bg-[#94A3B8]/50', 1],
-  [80, 96, 10, 'bg-[#3B82F6]/30', 3],
-  [10, 40, 18, 'bg-[#94A3B8]/20', 6],
-  [60, 98, 6, 'bg-[#3B82F6]/40', 1],
+const ACCESOS = [
+  { t: 'Casa', Icono: Home },
+  { t: 'Trabajo', Icono: Briefcase },
+  { t: 'Otro', Icono: Star },
 ]
 
-/** Escudos flotantes de fondo: [left%, top%, tamaño px, variante]. */
-const ESCUDOS: [number, number, number, 'azul' | 'rojo'][] = [
-  [8, 30, 34, 'azul'],
-  [90, 22, 40, 'azul'],
-  [92, 56, 30, 'azul'],
-  [10, 72, 38, 'rojo'],
-]
-
-/** Trayecto de la ruta en el mapa del mockup (viewBox 300×350). La luz lo recorre con offset-path. */
-const RUTA = 'M20 300 C 70 270, 110 240, 150 200 S 230 120, 272 90'
-
-const CONTACTOS = [
-  { ini: 'MP', bg: 'from-[#F472B6] to-[#DB2777]' },
-  { ini: 'JR', bg: 'from-[#60A5FA] to-[#2563EB]' },
-  { ini: 'CA', bg: 'from-[#FBBF24] to-[#D97706]' },
-  { ini: 'LS', bg: 'from-[#34D399] to-[#059669]' },
-  { ini: 'FV', bg: 'from-[#A78BFA] to-[#7C3AED]' },
+const TABS = [
+  { t: 'Inicio', Icono: Home },
+  { t: 'Red', Icono: Users },
+  { t: 'Actividad', Icono: History },
+  { t: 'Perfil', Icono: User },
 ]
 
 /**
- * Composición "floating phone" del hero (solo columna derecha).
- * Teléfono central estilo iPhone, inclinado en 3D con marco metálico, + 3 cards glass que se
- * superponen a sus bordes, sobre un fondo de puntos bokeh y escudos neón flotantes.
- * Sin dependencias nuevas: animaciones con keyframes CSS (.float-phone/.float-card).
+ * Teléfono del hero con la pantalla de inicio real de la app (/usuario): mapa oscuro teñido,
+ * pin "Tú" con ondas, buscador con accesos rápidos, estado y la barra Ruta + SOS.
+ * Inclinación 3D fija (.telefono-3d) más la del mouse. Decorativo: la pantalla es aria-hidden.
  */
 export default function FloatingPhoneMockup() {
   const zoneRef = useRef<HTMLDivElement | null>(null)
@@ -70,210 +49,165 @@ export default function FloatingPhoneMockup() {
       ref={zoneRef}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      className="group relative mx-auto w-full max-w-[640px] h-[560px] md:h-[680px]"
+      className="relative mx-auto flex w-full max-w-[560px] justify-center pb-10"
     >
-      {/* ── Fondo: bokeh + escudos ─────────────────────────────────────── */}
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        {BOKEH.map(([x, y, s, color, blur]) => (
-          <span
-            key={`${x}-${y}`}
-            className={`absolute rounded-full ${color}`}
-            style={{ left: `${x}%`, top: `${y}%`, width: s, height: s, filter: `blur(${blur}px)` }}
-          />
-        ))}
-        {ESCUDOS.map(([x, y, s, v], i) => (
-          <span
-            key={`${x}-${y}`}
-            className={`float-card hidden md:flex absolute items-center justify-center rounded-full border backdrop-blur-sm ${
-              v === 'rojo'
-                ? 'border-red-400/40 bg-red-500/10 text-red-400 shadow-[0_0_18px_rgba(248,113,113,0.35)]'
-                : 'border-blue-400/40 bg-blue-500/10 text-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.35)]'
-            }`}
-            style={{ left: `${x}%`, top: `${y}%`, width: s, height: s, animationDelay: `${i * 0.7}s` }}
-          >
-            <Shield size={s * 0.45} strokeWidth={2.25} fill="currentColor" fillOpacity={0.15} />
-          </span>
-        ))}
-      </div>
+      {/* Resplandor rojo bajo la zona del SOS: el único acento cálido de la página */}
+      <div aria-hidden className="pointer-events-none absolute bottom-[14%] left-1/2 h-40 w-72 -translate-x-1/4 rounded-full bg-red-600/20 blur-3xl" />
 
-      {/* ── Teléfono central ─────────────────────────────────────────── */}
-      {/* Centrado con flex: la animación float-phone usa transform y anularía un translate-x */}
-      <div className="absolute inset-x-0 top-2 md:top-4 z-10 flex justify-center">
-      <div className="float-phone">
-        {/* Marco metálico (degradado plateado) + bisel negro + pantalla */}
+      <div className="float-phone relative">
+        {/* Marco metálico + bisel negro + pantalla */}
         <div
           ref={tiltRef}
-          className="telefono-3d w-[260px] h-[540px] md:w-[300px] md:h-[620px] lg:w-[310px] lg:h-[640px] rounded-[48px] bg-[linear-gradient(145deg,#F1F5F9_0%,#94A3B8_18%,#334155_45%,#CBD5E1_70%,#475569_100%)] p-[3px] transition-transform duration-200 ease-out will-change-transform"
+          className="telefono-3d h-[600px] w-[290px] rounded-[48px] bg-[linear-gradient(145deg,#E2E8F0_0%,#64748B_20%,#1E293B_48%,#94A3B8_72%,#334155_100%)] p-[3px] transition-transform duration-200 ease-out will-change-transform md:h-[640px] md:w-[310px]"
           style={{
             transform:
               'perspective(1000px) rotateX(calc(var(--base-rx, 0deg) + var(--rx, 0deg))) rotateY(calc(var(--base-ry, 0deg) + var(--ry, 0deg)))',
-            boxShadow: '0 50px 90px -24px rgba(0, 0, 0, 0.8), 0 0 60px rgba(59, 130, 246, 0.25)',
+            boxShadow: '0 50px 90px -24px rgba(0, 0, 0, 0.85), 0 0 50px rgba(59, 130, 246, 0.18)',
           }}
         >
-          <div className="h-full w-full rounded-[45px] bg-[#0B0B0F] p-[6px]">
-          <div className="relative flex flex-col w-full h-full bg-white rounded-[39px] overflow-hidden">
-            {/* Dynamic Island */}
-            <span className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 w-[92px] h-[26px] rounded-full bg-black" />
-
-            {/* Mapa */}
-            <div className="relative h-[300px] md:h-[350px] bg-[#F8FAFC] overflow-hidden shrink-0">
-              <img src="/img/mapa-santiago.png" alt="Mapa de Santiago con ruta activa" className="w-full h-full object-cover" />
-              <svg viewBox="0 0 300 350" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden>
-                <path
-                  className="ruta-avance"
-                  d={RUTA}
-                  fill="none"
-                  stroke="#2563EB"
-                  strokeWidth="4.5"
-                  strokeLinecap="round"
-                  strokeDasharray="0.5 10"
-                />
-                {/* Punto de luz que recorre la ruta (.ruta-luz) */}
-                <g className="ruta-luz" style={{ offsetPath: `path('${RUTA}')` }}>
-                  <circle r="10" fill="#3B82F6" opacity="0.3" />
-                  <circle r="5" fill="#60A5FA" />
-                  <circle r="2.5" fill="#FFFFFF" />
-                </g>
-              </svg>
-              {/* Pin pulsante */}
-              <span className="absolute left-1/2 top-[57%] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
-                <span className="pin-ripple absolute w-12 h-12 rounded-full bg-[#2563EB]/30" />
-                <span className="relative w-5 h-5 rounded-full bg-[#2563EB] border-[3px] border-white shadow-[0_2px_10px_rgba(37,99,235,0.6)]" />
-              </span>
-
-              {/* Barra de búsqueda */}
-              <div className="absolute inset-x-3 top-11 flex items-center gap-2 rounded-2xl bg-white/95 backdrop-blur px-3 py-2 shadow-[0_4px_16px_rgba(15,23,42,0.12)]">
-                <Search size={14} className="text-[#94A3B8] shrink-0" strokeWidth={2.25} />
-                <span className="flex-1 text-[13px] font-bold text-[#1E293B]">CuidaChile</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#D1FAE5] px-2 py-0.5 text-[10px] font-semibold text-[#059669]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-                  Protegido
+          <div className="h-full w-full rounded-[45px] bg-[#05070C] p-[6px]">
+            <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[39px] bg-[#050B14] text-white" aria-hidden>
+              {/* Barra de estado + Dynamic Island */}
+              <div className="relative flex h-9 shrink-0 items-center justify-between px-6 text-[11px] font-semibold">
+                <span>9:41</span>
+                <span className="absolute left-1/2 top-2 h-[22px] w-[80px] -translate-x-1/2 rounded-full bg-black" />
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-3.5 rounded-[2px] border border-white/80" />
                 </span>
               </div>
-              <span className="absolute left-3 top-[92px] rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-[#1E293B] shadow-soft">
-                Ruta activa · 8 min
-              </span>
-            </div>
 
-            {/* Panel inferior */}
-            <div className="flex-1 bg-white rounded-t-3xl -mt-5 relative px-4 pt-3.5 pb-2 shadow-[0_-8px_24px_rgba(15,23,42,0.06)]">
-              <p className="text-[14px] font-bold text-[#0F172A]">Tu trayecto</p>
-              <p className="text-[12px] text-[#64748B]">Casa → Universidad</p>
-              {/* Progreso 65% */}
-              <div className="relative mt-2 h-1.5 rounded-full bg-[#E2E8F0]">
-                <div className="absolute inset-y-0 left-0 w-[65%] rounded-full bg-gradient-to-r from-[#3B82F6] to-[#2563EB]" />
-                <span className="absolute top-1/2 -translate-y-1/2 left-[65%] -translate-x-1/2 w-3 h-3 rounded-full bg-[#2563EB] border-2 border-white shadow" />
+              {/* Header de la app */}
+              <div className="flex shrink-0 items-center justify-between px-3.5 pb-2">
+                <span className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
+                    <ShieldCheck size={16} strokeWidth={2.25} />
+                  </span>
+                  <span className="text-[14px] font-bold">CuidaChile</span>
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    Protegido
+                  </span>
+                </span>
+                <Bell size={16} className="text-slate-300" />
               </div>
-              {/* SOS con glow */}
-              <div className="relative flex justify-center my-3">
-                <span className="absolute w-[76px] h-[76px] rounded-full bg-[#EF4444]/40 motion-safe:animate-ping" />
-                <div className="relative w-[76px] h-[76px] rounded-full bg-gradient-to-b from-[#F87171] to-[#DC2626] border-[3px] border-white/70 shadow-[0_0_32px_rgba(239,68,68,0.65),0_8px_24px_rgba(220,38,38,0.45)] flex flex-col items-center justify-center px-3 text-center text-white">
-                  <span className="text-[20px] font-extrabold leading-[1.1] tracking-widest">SOS</span>
-                  <span className="mt-0.5 text-[8px] uppercase leading-[1.1] tracking-wider opacity-90">Presionar 1.5s</span>
+
+              {/* Mapa + elementos flotantes */}
+              <div className="relative min-h-0 flex-1 overflow-hidden">
+                {/* Mapa de Santiago llevado al estilo oscuro teñido de la app */}
+                <img
+                  src="/img/mapa-santiago.png"
+                  alt=""
+                  className="absolute inset-0 h-full w-full scale-125 object-cover [filter:invert(1)_hue-rotate(180deg)_brightness(0.95)_contrast(1.15)]"
+                />
+                <div className="absolute inset-0 bg-[#0A2A6B] mix-blend-color" />
+                <div className="absolute inset-0 bg-gradient-to-b from-[#050B14]/60 via-transparent to-[#050B14]/70" />
+
+                {/* Buscador y accesos rápidos */}
+                <div className="absolute inset-x-3 top-1.5 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 rounded-full border border-blue-400/20 bg-slate-900/85 py-1 pl-3 pr-1 backdrop-blur-md">
+                    <Search size={13} className="text-slate-300" />
+                    <span className="flex-1 text-[11px] text-slate-400">¿A dónde vas?</span>
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500/15 text-blue-300">
+                      <MapPinned size={12} />
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {ACCESOS.map(({ t, Icono }) => (
+                      <span
+                        key={t}
+                        className="flex h-6 items-center justify-center gap-1 rounded-full border border-white/10 bg-slate-900/85 text-[10px] font-medium"
+                      >
+                        <Icono size={11} className="text-blue-400" />
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pin "Tú" con ondas */}
+                <span className="absolute left-[46%] top-[48%] flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+                  <span className="absolute h-7 w-7 rounded-full bg-blue-500/40 motion-safe:animate-ping" />
+                  <span className="absolute h-7 w-7 rounded-full bg-blue-500/30 motion-safe:animate-ping [animation-delay:0.7s]" />
+                  <span className="absolute h-10 w-10 rounded-full bg-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.7)]" />
+                  <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 ring-2 ring-white/90 shadow-[0_0_14px_rgba(59,130,246,0.95)]">
+                    <span className="h-2 w-2 rounded-full bg-white" />
+                  </span>
+                  <span className="absolute left-1/2 top-[calc(100%-6px)] -translate-x-1/2 rounded-full bg-blue-600 px-2 py-px text-[9px] font-bold">
+                    Tú
+                  </span>
+                </span>
+
+                {/* Controles del mapa */}
+                <div className="absolute bottom-2 right-2.5 flex flex-col items-center gap-1.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-800/85">
+                    <Crosshair size={14} />
+                  </span>
+                  <span className="flex flex-col overflow-hidden rounded-full border border-white/10 bg-slate-800/85">
+                    <span className="flex h-8 w-8 items-center justify-center">
+                      <Plus size={14} />
+                    </span>
+                    <span className="mx-2 h-px bg-white/10" />
+                    <span className="flex h-8 w-8 items-center justify-center">
+                      <Minus size={14} />
+                    </span>
+                  </span>
                 </div>
               </div>
-              {/* 3 acciones */}
-              <div className="flex justify-center gap-5">
-                {[
-                  { icon: Footprints, label: 'Acompañamiento' },
-                  { icon: MapPin, label: 'Check-in' },
-                  { icon: Share2, label: 'Compartir' },
-                ].map((a) => (
-                  <span key={a.label} className="flex flex-col items-center gap-1">
-                    <span className="w-8 h-8 rounded-full bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center">
-                      <a.icon size={15} strokeWidth={1.75} />
+
+              {/* Estado + barra de acciones */}
+              <div className="shrink-0 space-y-2 px-2.5 pb-2 pt-2">
+                <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-400/15 bg-slate-900/80 px-3 py-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15">
+                    <ShieldCheck size={17} className="text-emerald-400" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-bold leading-tight">Estás protegido</span>
+                    <span className="block truncate text-[10px] text-slate-400">Ubicación activa · Listo para pedir ayuda</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-900/90 p-2">
+                  <span className="flex h-12 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 px-2">
+                    <ShieldCheck size={17} className="shrink-0" />
+                    <span className="text-[11px] font-bold leading-tight">
+                      Iniciar
+                      <br />
+                      Ruta Segura
                     </span>
-                    <span className="text-[10px] font-medium text-[#475569]">{a.label}</span>
+                  </span>
+                  <span className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 shadow-[0_0_22px_rgba(220,38,38,0.6)]">
+                    <Siren size={18} className="shrink-0" />
+                    <span className="leading-none">
+                      <span className="block text-[17px] font-extrabold tracking-wider">SOS</span>
+                      <span className="mt-0.5 block text-[9px] font-semibold text-white/90">Mantén 1,5 s</span>
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Navbar */}
+              <div className="grid shrink-0 grid-cols-4 border-t border-white/10 bg-slate-900/95 pb-3">
+                {TABS.map(({ t, Icono }, i) => (
+                  <span
+                    key={t}
+                    className={`relative flex flex-col items-center gap-0.5 pt-1.5 text-[9px] font-semibold ${
+                      i === 0 ? 'text-blue-300' : 'text-slate-500'
+                    }`}
+                  >
+                    <Icono size={15} />
+                    {t}
+                    {i === 0 && (
+                      <span className="absolute bottom-[-6px] h-[2px] w-7 rounded-full bg-blue-500 shadow-[0_0_8px_2px_rgba(59,130,246,0.7)]" />
+                    )}
                   </span>
                 ))}
               </div>
             </div>
-
-            {/* Home indicator */}
-            <div className="flex justify-center pb-2 pt-1 bg-white shrink-0">
-              <span className="w-24 h-1 rounded-full bg-[#0F172A]/80" />
-            </div>
-          </div>
           </div>
         </div>
-      </div>
       </div>
 
       {/* Sombra en el suelo: le da peso al teléfono flotante */}
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-[548px] h-12 w-[300px] -translate-x-1/2 rounded-[50%] bg-black/70 blur-2xl md:top-[640px] lg:top-[660px]" />
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-[540px] h-16 w-[380px] -translate-x-1/2 rounded-[50%] bg-blue-600/25 blur-3xl md:top-[630px] lg:top-[650px]" />
-
-      {/* ── Card 1 · arriba izquierda: estado ──────────────────────────── */}
-      <div
-        className="float-card hidden md:flex absolute top-[130px] left-0 lg:-left-[2%] z-20 w-[190px] lg:w-[200px] flex-col gap-2 glass-card p-4 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDuration: '5s', animationDelay: '-0.8s' }}
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#94A3B8]">Estado de protección</p>
-        <div className="flex items-center gap-3">
-          <span className="relative w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: 'conic-gradient(#10B981 100%, #E2E8F0 0)' }}>
-            <span className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
-              <ShieldCheck size={18} className="text-[#10B981]" strokeWidth={2} />
-            </span>
-          </span>
-          <span>
-            <span className="block text-[14px] font-bold text-[#0F172A]">Protegido</span>
-            <span className="block text-[12px] text-[#64748B]">Ruta vigilada</span>
-          </span>
-        </div>
-      </div>
-
-      {/* ── Card 3 · abajo izquierda: tiempo de respuesta ───────────────── */}
-      <div
-        className="float-card hidden md:flex absolute top-[290px] -left-[2%] lg:-left-[6%] z-20 w-[180px] flex-col gap-2 glass-card p-4 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDuration: '5.6s', animationDelay: '-2.2s' }}
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#94A3B8]">Tiempo de respuesta</p>
-        <div className="flex items-center gap-3">
-          <span className="w-10 h-10 rounded-full bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center shrink-0">
-            <Timer size={20} strokeWidth={1.75} />
-          </span>
-          <span>
-            <span className="block text-[22px] font-bold leading-none text-[#0F172A]">8 seg</span>
-            <span className="block mt-1 text-[12px] text-[#64748B]">promedio</span>
-          </span>
-        </div>
-      </div>
-
-      {/* ── Card 4 · abajo derecha: círculo de confianza ────────────────── */}
-      <div
-        className="float-card hidden md:flex absolute bottom-[50px] lg:bottom-[60px] -right-[2%] lg:-right-[5%] z-20 w-[210px] flex-col gap-2 glass-card p-4 transition-all duration-200 group-hover:-translate-y-1"
-        style={{ animationDuration: '6.8s', animationDelay: '-4.6s' }}
-      >
-        <div className="flex items-center">
-          {CONTACTOS.map((c, i) => (
-            <span
-              key={c.ini}
-              className={`w-7 h-7 rounded-full bg-gradient-to-br ${c.bg} border-2 border-white flex items-center justify-center text-[8px] font-bold text-white ${i > 0 ? '-ml-2' : ''}`}
-            >
-              {c.ini}
-            </span>
-          ))}
-          <span className="-ml-2 w-7 h-7 rounded-full bg-[#10B981] border-2 border-white flex items-center justify-center text-white">
-            <Plus size={14} strokeWidth={2.75} />
-          </span>
-        </div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#94A3B8]">Círculo de confianza</p>
-        <div className="flex items-center justify-between">
-          <span>
-            <span className="block text-[24px] font-bold leading-none text-[#0F172A]">5/5</span>
-            <span className="block mt-1 text-[12px] text-[#64748B]">contactos activos</span>
-          </span>
-          {/* Mini gráfico circular 100% */}
-          <svg viewBox="0 0 36 36" className="w-11 h-11 -rotate-90" aria-hidden>
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#E2E8F0" strokeWidth="4" />
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#10B981" strokeWidth="4" strokeLinecap="round" strokeDasharray="94.25 94.25" />
-          </svg>
-        </div>
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-semibold text-[#059669]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-          Todos conectados
-        </span>
-      </div>
+      <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-10 w-[260px] -translate-x-1/2 rounded-[50%] bg-black/70 blur-2xl" />
     </div>
   )
 }

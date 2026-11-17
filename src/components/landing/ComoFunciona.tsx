@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
-import { Headphones, MapPin, MessageCircle, Phone, SendHorizontal, Shield, ShieldCheck, Siren, type LucideIcon } from 'lucide-react'
-import FondoConstelacion from '../FondoConstelacion'
+import { Headphones, MapPin, MessageCircle, Phone, SendHorizontal, ShieldCheck, Siren, type LucideIcon } from 'lucide-react'
 
 // Vite empaqueta el worker como asset aparte: sin esto el mapa no dispara 'load'.
 maplibregl.config.WORKER_URL = mapWorkerUrl
@@ -221,63 +220,6 @@ const CUERPOS: ComponentType[] = [CuerpoSOS, CuerpoMapa, CuerpoChat]
  * Panel de cristal de la derecha. Las tres vistas están apiladas y solo la del paso activo es
  * visible (.visual-paso): quedan montadas para no recrear el mapa al volver al paso 02.
  */
-/** Partículas alrededor del escudo: [left %, top %, tamaño px, retraso s]. */
-const PARTICULAS: [number, number, number, number][] = [
-  [8, 18, 4, 0],
-  [86, 10, 3, 0.6],
-  [96, 52, 5, 1.2],
-  [4, 70, 3, 1.8],
-  [72, 88, 4, 0.9],
-  [24, 94, 3, 1.5],
-  [50, 2, 3, 0.3],
-]
-
-/**
- * Escudo holográfico que flota a la derecha del panel: escudo lucide con brillo cian, un anillo
- * orbital elíptico que pasa por detrás (y por delante en su mitad inferior) y partículas que titilan.
- * Decorativo.
- */
-function EscudoHolografico({ className = '' }: { className?: string }) {
-  const orbita =
-    'absolute left-1/2 top-1/2 h-[36%] w-[140%] -translate-x-1/2 -translate-y-1/2 -rotate-[24deg] rounded-[50%] border-2 border-sky-400/70 shadow-[0_0_18px_rgba(56,189,248,0.6),inset_0_0_12px_rgba(56,189,248,0.35)]'
-  return (
-    <div className={`pointer-events-none aspect-square ${className}`} aria-hidden>
-      <div className="float-card relative h-full w-full">
-        {/* Halo detrás del escudo */}
-        <div className="absolute inset-[12%] rounded-full bg-blue-500/30 blur-3xl" />
-
-        {/* Órbita: mitad superior por detrás del escudo */}
-        <div className={orbita} />
-
-        {/* Escudo: contorno brillante, relleno de cristal y el escudo con check al centro */}
-        <div className="absolute inset-[14%] flex items-center justify-center">
-          <Shield
-            className="absolute h-full w-full fill-blue-500/15 text-sky-300 drop-shadow-[0_0_18px_rgba(59,130,246,0.9)]"
-            strokeWidth={0.9}
-          />
-          <Shield className="absolute h-[84%] w-[84%] fill-blue-600/10 text-blue-400/50" strokeWidth={0.6} />
-          <div className="relative flex h-[34%] w-[34%] items-center justify-center rounded-full shadow-[0_0_50px_rgba(59,130,246,0.8)]">
-            <ShieldCheck className="h-full w-full text-sky-200 drop-shadow-[0_0_10px_rgba(125,211,252,0.9)]" strokeWidth={1.5} />
-          </div>
-        </div>
-
-        {/* Órbita: mitad inferior por delante (clip antes de rotar), con un punto de luz en el extremo */}
-        <div className={`${orbita} [clip-path:inset(50%_0_0_0)]`} />
-        <div className="absolute left-[2%] top-[66%] h-2.5 w-2.5 rounded-full bg-sky-200 shadow-[0_0_14px_4px_rgba(56,189,248,0.8)]" />
-
-        {/* Partículas */}
-        {PARTICULAS.map(([x, y, t, r]) => (
-          <span
-            key={`${x}-${y}`}
-            className="absolute rounded-full bg-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.9)] motion-safe:animate-pulse"
-            style={{ left: `${x}%`, top: `${y}%`, width: t, height: t, animationDelay: `${r}s` }}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function PanelSOS({ activo }: { activo: number }) {
   const estado = ESTADOS[activo]
   return (
@@ -364,15 +306,11 @@ export default function ComoFunciona() {
   return (
     <section
       id="como-funciona"
-      className="relative isolate scroll-mt-20 overflow-x-clip bg-[radial-gradient(ellipse_80%_60%_at_60%_40%,#0A1128,#050B14_70%)] py-20 md:py-28"
+      className="relative isolate scroll-mt-20 overflow-x-clip bg-[radial-gradient(ellipse_80%_60%_at_60%_40%,#0A1128,#050B14_70%)] pb-12 pt-20 md:pt-28"
       aria-labelledby="titulo-como-funciona"
     >
       {/* overflow-x-clip y no overflow-hidden: corta los resplandores sin romper el sticky */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <FondoConstelacion variante="neon" className="absolute inset-0 h-full w-full opacity-60" />
-        {/* Resplandor azul en la parte inferior: horizonte curvo luminoso + bruma */}
-        <div className="absolute inset-x-0 bottom-0 h-[45%] bg-[radial-gradient(ellipse_70%_60%_at_50%_100%,rgba(37,99,235,0.28),transparent_70%)]" />
-        <div className="absolute -bottom-[200px] left-1/2 h-[300px] w-[160%] -translate-x-1/2 rounded-[50%] border-t border-blue-400/50 shadow-[0_-14px_60px_rgba(59,130,246,0.4)]" />
         {/* Funde con el fondo de la sección siguiente (#050B14) para que no se vea un corte */}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-[#050B14]" />
       </div>
@@ -380,20 +318,13 @@ export default function ComoFunciona() {
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 lg:grid-cols-12 lg:gap-x-12 lg:gap-y-10 lg:px-8">
         {/* Título (móvil: primero) */}
         <div className="lg:col-span-5">
-          <span className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-blue-300">
-            <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
-            Cómo funciona
-          </span>
           <h2
             id="titulo-como-funciona"
-            className="mt-5 text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
+            className="text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
           >
             Qué pasa cuando
             <br />
-            {/* inline-block + pb: el degradado recortado al texto no corta la p ni la y */}
-            <span className="inline-block bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text pb-[0.08em] text-transparent">
-              pides ayuda
-            </span>
+            pides ayuda
           </h2>
         </div>
 
@@ -401,8 +332,6 @@ export default function ComoFunciona() {
         <div className="lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">
           <div ref={refPanel} className="relative flex justify-center lg:sticky lg:top-24">
             <PanelSOS activo={activo} />
-            {/* Escudo holográfico a la derecha del panel (desde 1440px: antes no hay margen para él) */}
-            <EscudoHolografico className="absolute left-full top-1/2 ml-1 hidden w-40 -translate-y-1/2 min-[1440px]:block min-[1680px]:ml-8 min-[1680px]:w-60" />
           </div>
         </div>
 
@@ -435,13 +364,20 @@ export default function ComoFunciona() {
                 >
                   {String(i + 1).padStart(2, '0')}
                 </span>
+                {/* Tarjeta de cristal oscuro: reflejo de luz en el canto superior; el paso activo enciende su borde */}
                 <div
-                  className={`flex flex-1 items-start gap-4 rounded-2xl border p-5 transition-[background-color,border-color,box-shadow] duration-300 ${
+                  className={`relative flex min-w-0 flex-1 items-start gap-4 overflow-hidden rounded-2xl border bg-slate-900/40 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 sm:p-5 ${
                     esActivo
-                      ? 'border-blue-500/50 bg-slate-900/60 shadow-[0_0_30px_rgba(59,130,246,0.25)] backdrop-blur-md'
-                      : 'border-white/5 bg-slate-900/30'
+                      ? 'border-cyan-400/50 bg-slate-900/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_30px_rgba(59,130,246,0.3)]'
+                      : 'border-white/10'
                   }`}
                 >
+                  <span
+                    aria-hidden
+                    className={`pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300 to-transparent transition-opacity duration-300 ${
+                      esActivo ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  />
                   <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-950 to-slate-900">
                     <p.Icono size={26} strokeWidth={1.75} className={`${p.color} ${esActivo ? p.brillo : ''}`} aria-hidden />
                   </span>
@@ -453,7 +389,7 @@ export default function ComoFunciona() {
                     </h3>
                     <p
                       className={`mt-1.5 text-[15px] leading-relaxed transition-colors duration-300 ${
-                        esActivo ? 'text-slate-300' : 'text-slate-500'
+                        esActivo ? 'text-slate-300' : 'text-slate-400'
                       }`}
                     >
                       {p.d}

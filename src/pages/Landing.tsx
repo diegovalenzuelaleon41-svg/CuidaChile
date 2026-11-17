@@ -2,16 +2,17 @@
 import { ArrowRight, MapPin, Play, ShieldCheck, Users } from 'lucide-react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import HeroRender3D from '../components/landing/HeroRender3D'
+import FloatingPhoneMockup from '../components/FloatingPhoneMockup'
 import HeroBackdrop from '../components/HeroBackdrop'
 import ComoFunciona from '../components/landing/ComoFunciona'
 import Funciones from '../components/landing/Funciones'
 import CtaFinal from '../components/landing/CtaFinal'
+import QuienResponde from '../components/landing/QuienResponde'
 
 const CONFIANZA = [
   { Icono: ShieldCheck, texto: 'En tiempo real', color: 'text-blue-400' },
-  { Icono: MapPin, texto: 'Ubicación segura', color: 'text-sky-400' },
-  { Icono: Users, texto: 'Acompañamiento confiable', color: 'text-violet-400' },
+  { Icono: MapPin, texto: 'Ubicación segura', color: 'text-blue-400' },
+  { Icono: Users, texto: 'Acompañamiento confiable', color: 'text-blue-400' },
 ]
 
 export default function Landing() {
@@ -31,16 +32,11 @@ export default function Landing() {
                 <div className="absolute inset-x-10 inset-y-6 rounded-full bg-blue-600/10 blur-3xl" />
               </div>
 
-              <span className="inline-flex items-center gap-2 rounded-full border border-blue-400/40 bg-white/5 px-4 py-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(59,130,246,0.25)] backdrop-blur-md">
-                <ShieldCheck size={15} strokeWidth={2.25} className="text-blue-400" aria-hidden />
-                Seguridad que te acompaña
-              </span>
-
-              <h1 className="mt-6 text-[44px] font-extrabold leading-[1.02] tracking-[-0.03em] text-white sm:text-[56px] lg:text-[64px]">
+              <h1 className="text-[44px] font-extrabold leading-[1.02] tracking-[-0.03em] text-white sm:text-[56px] lg:text-[64px]">
                 Tu seguridad,
                 <br />
                 {/* inline-block + pb: el degradado recortado al texto no corta las letras con descendente (p, g) */}
-                <span className="inline-block bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text pb-[0.08em] text-transparent">
+                <span className="inline-block bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text pb-[0.08em] text-transparent">
                   siempre contigo.
                 </span>
               </h1>
@@ -49,21 +45,16 @@ export default function Landing() {
                 CuidaChile te ayuda a actuar rápidamente ante situaciones de riesgo, compartir tu ubicación y mantenerte conectado con personas de confianza.
               </p>
 
-              <div className="mt-9 flex flex-wrap gap-4">
-                <Link
-                  to="/registro"
-                  className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-8 py-4 text-[16px] font-semibold text-white shadow-[0_0_28px_rgba(59,130,246,0.55)] transition-[transform,box-shadow] duration-200 ease-out hover:scale-[1.02] hover:shadow-[0_0_44px_rgba(99,102,241,0.75)] active:scale-[0.98]"
-                >
+              {/* Móvil: botones a todo el ancho, uno bajo otro; desde sm en fila */}
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+                <Link to="/registro" className="btn-cristal btn-cristal-principal group relative overflow-hidden px-8">
                   {/* Brillo que cruza el botón cada 3 s (.shimmer / .shimmer-3s en index.css) */}
                   <span className="shimmer shimmer-3s pointer-events-none absolute inset-0" aria-hidden />
                   <span className="relative">Comenzar ahora</span>
                   <ArrowRight size={18} className="relative transition-transform group-hover:translate-x-0.5" aria-hidden />
                 </Link>
-                <a
-                  href="#como-funciona"
-                  className="inline-flex items-center justify-center gap-3 rounded-full border border-blue-400/60 bg-transparent px-7 py-4 text-[16px] font-semibold text-white transition-[border-color,box-shadow,background-color] duration-200 hover:border-blue-300 hover:bg-blue-500/10 hover:shadow-[0_0_24px_rgba(59,130,246,0.45)]"
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-blue-300/70">
+                <a href="#como-funciona" className="btn-cristal gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/30">
                     <Play size={12} className="ml-0.5 fill-current" aria-hidden />
                   </span>
                   Ver cómo funciona
@@ -81,21 +72,17 @@ export default function Landing() {
               </ul>
             </div>
 
-            <HeroRender3D />
+            {/* Pantalla real de la app (/usuario), entra una vez al cargar */}
+            <div className="hero-render-entrada">
+              <FloatingPhoneMockup />
+            </div>
           </div>
         </section>
 
         <ComoFunciona />
         <Funciones />
+        <QuienResponde />
         <CtaFinal />
-
-        {/* Seguridad: oscura fija, igual que el CTA de arriba y el footer de abajo */}
-        <section className="bg-[#0B1120]">
-          <div className="mx-auto max-w-7xl px-5 md:px-8 py-10 flex items-center justify-center gap-2 text-[13px] text-slate-400">
-            <ShieldCheck size={18} className="text-[#10B981]" aria-hidden />
-            Tus datos están protegidos según la Ley 19.628 y Ley 21.719.
-          </div>
-        </section>
       </main>
       <Footer />
     </div>
