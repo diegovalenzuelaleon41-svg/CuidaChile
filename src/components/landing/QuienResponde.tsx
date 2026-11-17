@@ -37,7 +37,7 @@ export default function QuienResponde() {
   return (
     <section
       id="confianza"
-      className="scroll-mt-20 border-t border-white/5 bg-[#050B14] px-4 py-12 md:px-8 md:py-28"
+      className="scroll-mt-20 border-t border-white/5 bg-[#050B14] px-4 py-12 md:px-8 md:py-24"
       aria-labelledby="titulo-confianza"
     >
       <div ref={ref} data-visto={visto || undefined} className="mx-auto max-w-6xl">

@@ -3,6 +3,7 @@ import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { Headphones, MapPin, MessageCircle, Phone, SendHorizontal, ShieldCheck, Siren, type LucideIcon } from 'lucide-react'
+import { useEnVista } from '../../hooks/useEnVista'
 
 // Vite empaqueta el worker como asset aparte: sin esto el mapa no dispara 'load'.
 maplibregl.config.WORKER_URL = mapWorkerUrl
@@ -270,6 +271,7 @@ export default function ComoFunciona() {
   const [activo, setActivo] = useState(0)
   const refsPasos = useRef<(HTMLLIElement | null)[]>([])
   const refPanel = useRef<HTMLDivElement | null>(null)
+  const [refTitulo, tituloVisto] = useEnVista<HTMLDivElement>()
 
   useEffect(() => {
     if (!('IntersectionObserver' in window)) return
@@ -306,7 +308,7 @@ export default function ComoFunciona() {
   return (
     <section
       id="como-funciona"
-      className="relative isolate scroll-mt-20 overflow-x-clip bg-[radial-gradient(ellipse_80%_60%_at_60%_40%,#0A1128,#050B14_70%)] py-12 md:pb-16 md:pt-28"
+      className="relative isolate scroll-mt-20 overflow-x-clip bg-[radial-gradient(ellipse_80%_60%_at_60%_40%,#0A1128,#050B14_70%)] py-12 md:py-24"
       aria-labelledby="titulo-como-funciona"
     >
       {/* overflow-x-clip y no overflow-hidden: corta los resplandores sin romper el sticky */}
@@ -317,7 +319,8 @@ export default function ComoFunciona() {
 
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-4 md:gap-10 md:px-8 lg:grid-cols-12 lg:gap-x-12 lg:gap-y-10 lg:px-8">
         {/* Título (móvil: primero) */}
-        <div className="lg:col-span-5">
+        <div ref={refTitulo} data-visto={tituloVisto || undefined} className="revelar lg:col-span-5">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-cyan-400">Cómo funciona</p>
           <h2
             id="titulo-como-funciona"
             className="text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white sm:text-[38px] md:text-[52px]"
@@ -331,7 +334,9 @@ export default function ComoFunciona() {
         {/* Panel (móvil: al final, bajo los pasos, sin sticky). En escritorio ocupa las dos filas de la derecha para quedar fijo durante todos los pasos. */}
         <div className="order-last lg:order-none lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">
           <div ref={refPanel} className="relative flex justify-center lg:sticky lg:top-24">
-            <PanelSOS activo={activo} />
+            <div className="revelar w-full max-w-[600px]" data-visto={tituloVisto || undefined} style={{ transitionDelay: '150ms' }}>
+              <PanelSOS activo={activo} />
+            </div>
           </div>
         </div>
 
@@ -353,13 +358,23 @@ export default function ComoFunciona() {
               >
                 {/* Línea punteada hasta el número siguiente */}
                 {!ultimo && (
-                  <span aria-hidden className="absolute bottom-0 left-5 top-12 -translate-x-px sm:left-6 sm:top-14 border-l-2 border-dashed border-blue-500/50" />
+                  <span aria-hidden className="absolute bottom-0 left-5 top-12 -translate-x-px sm:left-6 sm:top-14 border-l-2 border-dashed border-blue-500/40" />
+                )}
+                {/* Tramo ya recorrido: se ilumina en cian y guía el ojo al paso siguiente */}
+                {!ultimo && (
+                  <span
+                    aria-hidden
+                    className="linea-progreso absolute bottom-0 left-5 top-12 w-0.5 bg-gradient-to-b from-cyan-400 to-violet-500 shadow-[0_0_10px_rgba(34,211,238,0.7)] sm:left-6 sm:top-14"
+                    style={{ transform: `translateX(-1px) scaleY(${i < activo ? 1 : 0})` }}
+                  />
                 )}
                 <span
                   className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[14px] sm:h-12 sm:w-12 sm:text-[15px] font-bold tabular-nums transition-[background-color,color,box-shadow] duration-300 ${
                     esActivo
-                      ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.8)]'
-                      : 'border border-white/10 bg-slate-800 text-slate-400'
+                      ? 'bg-cyan-500 text-white shadow-[0_0_18px_rgba(6,182,212,0.85)]'
+                      : i < activo
+                        ? 'border border-cyan-400/50 bg-slate-900 text-cyan-300'
+                        : 'border border-white/10 bg-slate-800 text-slate-400'
                   }`}
                 >
                   {String(i + 1).padStart(2, '0')}

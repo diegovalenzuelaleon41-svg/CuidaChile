@@ -42,7 +42,7 @@ export default function Funciones() {
   return (
     <section
       id="funciones"
-      className="relative isolate scroll-mt-20 overflow-hidden bg-[#050B14] px-4 py-12 md:px-8 md:py-28"
+      className="relative isolate scroll-mt-20 overflow-hidden bg-[#050B14] px-4 py-12 md:px-8 md:py-24"
       aria-labelledby="titulo-funciones"
     >
       {/* Fondo: resplandor azul arriba a la izquierda */}
