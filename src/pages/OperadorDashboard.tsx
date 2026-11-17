@@ -1,8 +1,9 @@
 /**
  * Panel de Operador — Centro de Comando (Fase 2), estilo "Dark Control Room".
  *
- * Dashboard desktop-first, sin scroll general (h-screen).
- * Tres columnas + header superior. SOS (tabla alertas), acompañamientos
+ * Dashboard desktop-first, sin scroll general (h-[100dvh]).
+ * Escritorio (lg): tres columnas + header superior. Teléfono: una columna a la vez
+ * (Bandeja, Mapa, Caso) con una barra de pestañas abajo, al alcance del pulgar. SOS (tabla alertas), acompañamientos
  * (tabla acompanamientos) y Barrial (tabla reportes, agrupados por zona)
  * son reales vía Supabase Realtime.
  *
@@ -35,6 +36,9 @@ import {
   CircleCheck,
   EyeOff,
   Layers,
+  Inbox,
+  Map as MapIcon,
+  ClipboardList,
 } from 'lucide-react'
 import Logo from '../components/Logo'
 import MapaOperador from '../components/operador/MapaOperador'
@@ -610,51 +614,63 @@ export default function OperadorDashboard() {
 
   const pendientesPorTab = (t: TabId) => filtrarPorTipo(alertas, t).filter((a) => a.estado === 'PENDIENTE').length
 
+  /* ── Teléfono: una columna a la vez ──
+     El mapa vuelve de display:none con tamaño 0; MapLibre se reajusta con el evento resize. */
+  const [vistaMovil, setVistaMovil] = useState<'bandeja' | 'mapa' | 'caso'>('bandeja')
+  const cambiarVistaMovil = (v: 'bandeja' | 'mapa' | 'caso') => {
+    setVistaMovil(v)
+    if (v === 'mapa') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+  }
+  const esMovil = () => !window.matchMedia('(min-width: 1024px)').matches
+
   /* ──────────────────────────────── Render ──────────────────────────────── */
 
   const sel = alertaSeleccionada
   const tiempoSel = sel ? tiempoAcompanamiento(sel, ahora) : null
 
   return (
-    <main className="h-screen bg-[#050A16] bg-[radial-gradient(ellipse_at_top_right,rgba(37,99,235,0.16),transparent_55%),radial-gradient(ellipse_at_bottom_left,rgba(37,99,235,0.10),transparent_50%)] text-slate-100 flex flex-col overflow-hidden">
+    <main className="h-[100dvh] bg-[#050A16] bg-[radial-gradient(ellipse_at_top_right,rgba(37,99,235,0.16),transparent_55%),radial-gradient(ellipse_at_bottom_left,rgba(37,99,235,0.10),transparent_50%)] text-slate-100 flex flex-col overflow-hidden">
       {/* ── 1. Header Superior (64px) ── */}
-      <header className="h-16 shrink-0 bg-slate-950/50 backdrop-blur-md border-b border-slate-800/70 flex items-center justify-between gap-4 md:gap-6 w-full px-4 md:px-6 z-20">
-        <div className="flex items-center gap-3 min-w-0">
+      <header className="h-14 lg:h-16 shrink-0 bg-slate-950/50 backdrop-blur-md border-b border-slate-800/70 flex items-center justify-between gap-2 md:gap-6 w-full px-3 md:px-6 z-20">
+        <div className="flex items-center gap-1.5 md:gap-3 min-w-0">
           <button
             type="button"
             onClick={() => navigate('/')}
             aria-label="Volver al inicio"
-            className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-[10px] text-slate-400 text-sm font-medium hover:bg-slate-800/60 hover:text-white transition-colors"
+            className="shrink-0 flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 px-2.5 md:px-3 py-2 rounded-[10px] text-slate-400 text-sm font-medium hover:bg-slate-800/60 hover:text-white transition-colors"
           >
             <ArrowLeft size={18} strokeWidth={2} />
             <span className="hidden md:block">Inicio</span>
           </button>
-          <div className="shrink-0">
-            <Logo size={34} textoClaro />
+          {/* En teléfonos angostos queda solo el isotipo: el texto deja sitio a "Cerrar turno" */}
+          <div className="shrink-0 max-[419px]:[&>span>span:last-child]:hidden">
+            <Logo size={32} textoClaro />
           </div>
           <span className="hidden lg:block truncate text-[18px] font-semibold text-slate-200 tracking-tight">
             Panel de Operador
           </span>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-medium border border-emerald-500/30">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          <span className="flex items-center gap-1.5 whitespace-nowrap px-2.5 md:px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-medium border border-emerald-500/30">
             <span className="w-2 h-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" aria-hidden />
             En línea
           </span>
           <button
             type="button"
             onClick={() => navigate('/seleccionar-rol')}
-            className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-[10px] bg-gradient-to-r from-blue-600 to-sky-500 text-white text-sm font-semibold shadow-[0_0_18px_rgba(59,130,246,0.45)] hover:from-blue-500 hover:to-sky-400 transition-colors"
+            className="flex min-h-[40px] items-center gap-2 whitespace-nowrap px-3 md:px-4 py-2 rounded-[10px] bg-gradient-to-r from-blue-600 to-sky-500 text-white text-sm font-semibold shadow-[0_0_18px_rgba(59,130,246,0.45)] hover:from-blue-500 hover:to-sky-400 transition-colors"
           >
             Cerrar Turno
           </button>
         </div>
       </header>
 
-      {/* ── Cuerpo: 3 columnas ── */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* ── Cuerpo: 3 columnas (lg); en teléfono, solo la de la pestaña activa ── */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* ── 2. Columna Izquierda (25%) - Bandeja de Entrada ── */}
-        <aside className="w-1/4 border-r border-slate-800/60 flex flex-col overflow-hidden z-10">
+        <aside
+          className={`${vistaMovil === 'bandeja' ? 'flex' : 'hidden'} w-full lg:flex lg:w-1/4 lg:border-r border-slate-800/60 flex-col overflow-hidden z-10`}
+        >
           <div className="p-3 shrink-0">
             <div className="rounded-2xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-md p-4 shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
               <h2 className="text-sm font-semibold text-white">Bandeja de Entrada</h2>
@@ -721,7 +737,11 @@ export default function OperadorDashboard() {
                   estaSeleccionada={sel?.id === alerta.id}
                   enVivo={esEnVivo(alerta)}
                   senalPerdidaSeg={sinSenal(alerta)}
-                  onClick={() => setSeleccionId(alerta.id)}
+                  onClick={() => {
+                    setSeleccionId(alerta.id)
+                    // En el teléfono, elegir una alerta lleva al mapa con su ficha
+                    if (esMovil()) cambiarVistaMovil('mapa')
+                  }}
                   onAccion={() => void manejarAccion(alerta)}
                   onRechazar={() => setPorRechazar(alerta)}
                 />
@@ -731,7 +751,7 @@ export default function OperadorDashboard() {
         </aside>
 
         {/* ── 3. Columna Central (50%) - Mapa con tarjeta flotante ── */}
-        <div className="w-2/4 relative overflow-hidden bg-slate-950">
+        <div className={`${vistaMovil === 'mapa' ? 'block' : 'hidden'} w-full lg:block lg:w-2/4 relative overflow-hidden bg-slate-950`}>
           <MapaOperador
             seleccion={
               sel && {
@@ -767,9 +787,9 @@ export default function OperadorDashboard() {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-[#050A16] via-[#050A16]/70 to-transparent" aria-hidden />
 
           {/* Tarjeta flotante central */}
-          <div className="absolute inset-x-0 bottom-6 z-20 flex justify-center px-6">
+          <div className="absolute inset-x-0 bottom-3 lg:bottom-6 z-20 flex justify-center px-3 lg:px-6">
             {sel ? (
-              <div className="relative w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900/90 backdrop-blur-lg px-5 pb-5 pt-8 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_0_1px_rgba(59,130,246,0.08)]">
+              <div className="relative w-full max-w-sm max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900/90 backdrop-blur-lg px-4 pb-4 pt-8 lg:px-5 lg:pb-5 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_0_1px_rgba(59,130,246,0.08)]">
                 {/* Timer: hora de la solicitud */}
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-4 py-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.5)]">
                   <Clock3 size={15} strokeWidth={2.25} className="text-sky-400" />
@@ -876,7 +896,20 @@ export default function OperadorDashboard() {
         </div>
 
         {/* ── 4. Columna Derecha (25%) - Acciones y Bitácora ── */}
-        <aside className="w-1/4 border-l border-slate-800/60 bg-slate-950/30 backdrop-blur-md flex flex-col overflow-hidden">
+        <aside
+          className={`${vistaMovil === 'caso' ? 'flex' : 'hidden'} w-full lg:flex lg:w-1/4 lg:border-l border-slate-800/60 bg-slate-950/30 backdrop-blur-md flex-col overflow-y-auto lg:overflow-hidden`}
+        >
+          {/* Teléfono: de qué caso se trata, ya que el mapa con su ficha queda en otra pestaña */}
+          {sel && (
+            <div className="lg:hidden mx-4 mt-4 shrink-0 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3">
+              <p className="text-[11px] font-semibold" style={{ color: colorPorTipo(sel.tipo) }}>
+                {labelPorTipo(sel.tipo)} · {estadoTexto(sel.estado)} · {sel.hora}
+              </p>
+              <p className="mt-0.5 truncate text-[15px] font-semibold text-white">
+                {sel.barrial ? sel.barrial.categoria : sel.nombre}
+              </p>
+            </div>
+          )}
           {/* Llamada de voz con el ciudadano (SOS) */}
           {llamadaAlertaId && (
             <div className="px-5 pt-5 shrink-0">
@@ -956,7 +989,7 @@ export default function OperadorDashboard() {
           </div>
 
           {/* Bitácora / Chat con el ciudadano (Centro) */}
-          <div className="flex-1 min-h-0 px-5 pb-2 flex flex-col">
+          <div className="flex-1 min-h-[320px] lg:min-h-0 px-5 pb-2 flex flex-col">
             <div role="tablist" aria-label="Panel del evento" className="mb-4 flex gap-1 rounded-xl border border-slate-700/60 bg-slate-900/50 p-1">
               {(
                 [
@@ -1068,6 +1101,46 @@ export default function OperadorDashboard() {
           </div>
         </aside>
       </div>
+
+      {/* ── Teléfono: pestañas abajo (zona del pulgar) ── */}
+      <nav
+        aria-label="Secciones del panel"
+        className="lg:hidden shrink-0 grid grid-cols-3 border-t border-slate-800/70 bg-slate-950/80 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
+      >
+        {(
+          [
+            { id: 'bandeja', texto: 'Bandeja', Icono: Inbox, badge: pendientesPorTab('TODAS') },
+            { id: 'mapa', texto: 'Mapa', Icono: MapIcon, badge: 0 },
+            { id: 'caso', texto: 'Caso', Icono: ClipboardList, badge: chatNoLeidos },
+          ] as const
+        ).map(({ id, texto, Icono, badge }) => {
+          const activa = vistaMovil === id
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => cambiarVistaMovil(id)}
+              aria-current={activa ? 'page' : undefined}
+              className={`relative flex min-h-[56px] flex-col items-center justify-center gap-1 text-[12px] font-medium transition-colors ${
+                activa ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="relative">
+                <Icono size={20} strokeWidth={activa ? 2.25 : 1.75} className={activa ? 'text-blue-400' : ''} aria-hidden />
+                {badge > 0 && (
+                  <span className="absolute -right-2.5 -top-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                    {badge}
+                  </span>
+                )}
+              </span>
+              {texto}
+              {activa && (
+                <span className="absolute inset-x-8 top-0 h-0.5 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]" aria-hidden />
+              )}
+            </button>
+          )
+        })}
+      </nav>
       {porEscalar && (
         <ModalEscalar
           alerta={porEscalar}
