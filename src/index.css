@@ -36,6 +36,17 @@ body * {
   }
 }
 
+@layer utilities {
+  /* Carrusel horizontal sin barra visible (sigue deslizable con el dedo y la rueda) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-[10px] bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white font-semibold shadow-[0_8px_24px_rgba(37,99,235,0.25)] transition-all duration-200 hover:scale-[1.02] hover:from-[#1D4ED8] hover:to-[#2563EB] active:scale-[0.98];

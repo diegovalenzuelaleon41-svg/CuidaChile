@@ -139,7 +139,7 @@ export default function BotonSOS({ onActivar, abierta = false, size = 'lg', form
           type="button"
           {...manejadores}
           aria-label={etiqueta}
-          className={`relative h-16 w-full overflow-hidden rounded-2xl border border-red-300/40 bg-red-600 text-white flex items-center justify-center gap-3 px-3 select-none touch-none [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent] shadow-[0_0_30px_rgba(220,38,38,0.6)] transition-[transform,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70 ${
+          className={`relative h-full min-h-[76px] w-full overflow-hidden rounded-2xl border border-red-300/40 bg-red-600 text-white flex flex-col items-center justify-center gap-1 px-4 py-3 select-none touch-none [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent] shadow-[0_0_30px_rgba(220,38,38,0.6)] transition-[transform,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70 ${
             presionando ? 'scale-[0.97] shadow-[0_0_44px_rgba(220,38,38,0.9)]' : 'hover:shadow-[0_0_40px_rgba(220,38,38,0.75)]'
           }`}
         >
@@ -150,15 +150,16 @@ export default function BotonSOS({ onActivar, abierta = false, size = 'lg', form
             aria-hidden
           />
           <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" aria-hidden />
-          <Siren size={28} strokeWidth={2} className="relative shrink-0" aria-hidden />
-          <span className="relative flex min-w-0 flex-col items-start leading-none">
-            <span className="text-[26px] font-extrabold tracking-wider">SOS</span>
-            <span
-              className={`mt-1 truncate text-[12px] font-semibold ${soltoAntes ? 'text-amber-200' : 'text-white/90'}`}
-              aria-hidden
-            >
-              {ayudaBarra}
-            </span>
+          {/* "SOS" a 28 px, el doble que la ayuda (14 px), para leerlo de un vistazo */}
+          <span className="relative flex items-center gap-2 leading-none">
+            <Siren size={24} strokeWidth={2.25} className="shrink-0" aria-hidden />
+            <span className="text-[28px] font-extrabold tracking-wider">SOS</span>
+          </span>
+          <span
+            className={`relative max-w-full truncate text-[14px] font-semibold leading-none ${soltoAntes ? 'text-amber-200' : 'text-white/95'}`}
+            aria-hidden
+          >
+            {ayudaBarra}
           </span>
         </button>
         {avisoLector}

@@ -13,23 +13,24 @@ interface Props {
 export default function DashboardHeader({ alertaActiva, protegido }: Props) {
   return (
     <header
-      className={`sticky top-0 z-50 border-b backdrop-blur transition-colors duration-300 ${
-        alertaActiva ? 'bg-sos border-sos text-white' : 'bg-white/95 border-line dark:bg-slate-900/95 dark:border-slate-700'
+      className={`sticky top-0 z-50 border-b backdrop-blur-md transition-colors duration-300 ${
+        alertaActiva ? 'bg-sos border-sos text-white' : 'bg-white/90 border-line dark:bg-slate-900/80 dark:border-white/10'
       }`}
     >
-      <div className="mx-auto w-full max-w-6xl flex justify-between items-center gap-3 px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Logo size={34} textoClaro={alertaActiva} />
+      {/* ~56 px de alto: menos del 10 % de la pantalla de un teléfono */}
+      <div className="mx-auto w-full max-w-6xl flex justify-between items-center gap-3 px-4 py-1.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Logo size={30} textoClaro={alertaActiva} />
           <span
-            className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap ${
+            className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
               alertaActiva
                 ? 'bg-white text-sos'
                 : protegido
-                  ? 'bg-[#ECFDF5] text-[#059669] dark:bg-emerald-500/15 dark:text-emerald-300'
+                  ? 'bg-[#ECFDF5] text-[#059669] dark:bg-emerald-500/10 dark:text-emerald-300'
                   : 'bg-canvas text-muted dark:bg-slate-800 dark:text-slate-400'
             }`}
           >
-            <span className={`w-2 h-2 shrink-0 rounded-full animate-pulse ${alertaActiva ? 'bg-sos' : 'bg-ok'}`} aria-hidden />
+            <span className={`w-1.5 h-1.5 shrink-0 rounded-full animate-pulse ${alertaActiva ? 'bg-sos' : 'bg-ok'}`} aria-hidden />
             <span className="max-[359px]:sr-only">{alertaActiva ? 'ALERTA' : protegido ? 'Protegido' : 'Inactivo'}</span>
           </span>
         </div>

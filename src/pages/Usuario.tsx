@@ -530,6 +530,11 @@ export default function Usuario() {
           attributionControl: false,
         })
         map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
+        // MapLibre abre la atribución compacta al cargar y asoma bajo la tarjeta inferior:
+        // se deja plegada (botón "i"); tocarla la vuelve a mostrar.
+        map.once('idle', () => {
+          container.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
+        })
         // Zoom y "centrar" son botones propios (columna derecha); los controles
         // nativos de MapLibre los duplicaban y quedaban bajo la tarjeta inferior.
         mapObj.current = map
@@ -537,15 +542,16 @@ export default function Usuario() {
         // brillante con centro blanco y etiqueta "Tú". Clases Tailwind: el escáner las ve aquí.
         const wrap = document.createElement('div')
         wrap.className = 'relative flex h-16 w-16 items-center justify-center'
+        // Ondas con borde propio: se leen tanto sobre calles iluminadas como sobre manzanas oscuras.
         for (const retraso of [0, 0.6, 1.2]) {
           const onda = document.createElement('span')
-          onda.className = 'absolute h-8 w-8 rounded-full bg-blue-500/40 motion-safe:animate-ping'
+          onda.className = 'absolute h-10 w-10 rounded-full border-2 border-blue-400/80 bg-blue-500/30 motion-safe:animate-ping'
           onda.style.animationDelay = `${retraso}s`
-          onda.style.animationDuration = '1.8s'
+          onda.style.animationDuration = '2.1s'
           wrap.appendChild(onda)
         }
         const halo = document.createElement('span')
-        halo.className = 'absolute h-12 w-12 rounded-full bg-blue-500/20 shadow-[0_0_24px_rgba(59,130,246,0.7)]'
+        halo.className = 'absolute h-12 w-12 rounded-full bg-blue-500/25 shadow-[0_0_28px_rgba(59,130,246,0.85)]'
         const dot = document.createElement('span')
         dot.className =
           'relative flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 ring-2 ring-white/90 shadow-[0_0_18px_rgba(59,130,246,0.95)]'
@@ -555,7 +561,7 @@ export default function Usuario() {
         const label = document.createElement('span')
         label.textContent = 'Tú'
         label.className =
-          'absolute left-1/2 top-[calc(100%-6px)] -translate-x-1/2 whitespace-nowrap rounded-full bg-blue-600 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-[0_0_12px_rgba(37,99,235,0.7)]'
+          'absolute left-1/2 top-[calc(100%-4px)] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/70 bg-blue-600 px-2.5 py-0.5 text-[12px] font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.6),0_0_12px_rgba(37,99,235,0.7)]'
         wrap.appendChild(halo)
         wrap.appendChild(dot)
         wrap.appendChild(label)
@@ -2014,13 +2020,13 @@ export default function Usuario() {
           <div className="absolute inset-0 z-40 pointer-events-none">
             {/* ── Zona superior: búsqueda + contactos, avisos GPS, destino, reportar ── */}
             <div className="absolute inset-x-0 top-0 p-3 flex flex-col items-stretch sm:items-start gap-2">
-              <div className="pointer-events-auto sm:w-[400px] flex items-center gap-1 rounded-full border border-blue-400/20 bg-slate-900/80 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-md">
+              <div className="pointer-events-auto sm:w-[400px] flex items-center gap-1 rounded-full border border-blue-400/20 bg-slate-900/80 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-md">
                 <button
                   onClick={abrirRuta}
-                  className="flex-1 min-w-0 h-11 flex items-center gap-3 rounded-full pl-3.5 pr-2 text-left hover:bg-white/5 transition-colors"
+                  className="flex-1 min-w-0 h-11 flex items-center gap-2.5 rounded-full pl-3.5 pr-2 text-left hover:bg-white/5 transition-colors"
                   aria-label="Buscar destino"
                 >
-                  <Search size={20} className="text-slate-300 shrink-0" />
+                  <Search size={18} className="text-slate-300 shrink-0" />
                   <span className={`text-[15px] truncate ${rutaActiva ? 'text-white' : 'text-slate-400'}`}>
                     {rutaActiva ? rutaActiva.destino : '¿A dónde vas?'}
                   </span>
@@ -2036,9 +2042,10 @@ export default function Usuario() {
                 </button>
               </div>
 
-              {/* Accesos rápidos: abren la búsqueda de destino (aún no hay lugares guardados) */}
+              {/* Accesos rápidos: abren la búsqueda de destino (aún no hay lugares guardados).
+                  Una sola fila deslizable; -mx-3/px-3 deja que se deslicen hasta el borde de la pantalla. */}
               {!rutaActiva && !preview && !seleccionandoDestino && !selReporte && (
-                <div className="pointer-events-auto grid grid-cols-3 gap-2 sm:w-[400px]">
+                <div className="pointer-events-auto -mx-3 flex gap-2 overflow-x-auto px-3 scrollbar-hide sm:mx-0 sm:w-[400px] sm:px-0">
                   {([
                     { t: 'Casa', Icono: Home },
                     { t: 'Trabajo', Icono: Briefcase },
@@ -2047,23 +2054,19 @@ export default function Usuario() {
                     <button
                       key={t}
                       onClick={abrirRuta}
-                      className="h-10 flex items-center justify-center gap-2 rounded-full border border-white/10 bg-slate-900/80 text-[14px] font-medium text-slate-100 backdrop-blur-md hover:border-blue-400/40 hover:bg-slate-800/80 transition-colors"
+                      className="h-9 shrink-0 flex items-center gap-1.5 rounded-full border border-white/10 bg-slate-900/80 px-3.5 text-[13px] font-medium text-slate-100 backdrop-blur-md hover:border-blue-400/40 hover:bg-slate-800/80 transition-colors"
                     >
-                      <Icono size={17} className="text-blue-400" aria-hidden />
+                      <Icono size={15} className="text-blue-400" aria-hidden />
                       {t}
                     </button>
                   ))}
                 </div>
               )}
 
-              {gpsEstado === 'pendiente' && (
-                <div className="pointer-events-auto sm:max-w-[400px] flex items-center gap-2 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2.5">
-                  <span className="w-4 h-4 rounded-full border-2 border-[#60A5FA]/25 border-t-[#60A5FA] animate-spin shrink-0" aria-hidden />
-                  <p className="text-[12px] font-medium text-slate-300 leading-snug">
-                    Localizando tu ubicación…{acc != null ? ` GPS ±${Math.round(acc)} m` : ''}
-                  </p>
-                </div>
-              )}
+              {/* Localizando: el pin del mapa ya lo muestra; solo se anuncia a lectores de pantalla */}
+              <p className="sr-only" aria-live="polite">
+                {gpsEstado === 'pendiente' ? 'Localizando tu ubicación…' : ''}
+              </p>
 
               {gpsEstado === 'denegado' && (
                 <button
@@ -2143,12 +2146,6 @@ export default function Usuario() {
                 </div>
               )}
 
-              {/* Reportar: arriba a la derecha, lejos de la zona del pulgar y del SOS */}
-              {!rutaActiva && !preview && !seleccionandoDestino && !selReporte && (
-                <div className="pointer-events-auto self-end">
-                  <BotonReportar onClick={() => setShowReporte(true)} cantidad={reportes.length} />
-                </div>
-              )}
             </div>
 
             {/* Pin central fijo (modo selección de destino o de reporte) */}
@@ -2169,9 +2166,19 @@ export default function Usuario() {
 
             {/* ── Zona inferior (pulgar): controles del mapa + una sola barra de acción.
                 El mapa termina donde empieza la navbar, así que basta un margen de 16 px. ── */}
-            <div className="absolute inset-x-0 bottom-0 px-4 pb-4 flex flex-col items-stretch gap-3">
-              {/* Controles del mapa (derecha): recentrar aparte y zoom agrupado, siempre sobre la barra */}
-              <div className="pointer-events-auto self-end flex flex-col items-center gap-2.5">
+            <div className="absolute inset-x-0 bottom-0 px-4 pb-5 flex flex-col items-stretch gap-3">
+              {/* Fila de controles sobre la tarjeta: Reportar a la izquierda, mapa a la derecha.
+                  Ya no comparten columna, así que no se enciman. */}
+              <div className="flex items-end justify-between gap-3">
+                {!rutaActiva && !preview && !seleccionandoDestino && !selReporte ? (
+                  <div className="pointer-events-auto">
+                    <BotonReportar onClick={() => setShowReporte(true)} cantidad={reportes.length} />
+                  </div>
+                ) : (
+                  <span aria-hidden />
+                )}
+                {/* Recentrar aparte y zoom agrupado en una píldora */}
+                <div className="pointer-events-auto flex flex-col items-center gap-2">
                 <button
                   onClick={centrarme}
                   disabled={!mapaListo}
@@ -2201,6 +2208,7 @@ export default function Usuario() {
                   >
                     <Minus size={20} />
                   </button>
+                </div>
                 </div>
               </div>
 
@@ -2301,31 +2309,27 @@ export default function Usuario() {
                     </div>
                   )}
 
-                  {/* Estado en reposo: solo cuando no hay alerta, ruta ni solicitud en curso */}
-                  {!rutaActiva && !alertaActiva && !sos.abierta && !acomp && (
-                    <div className="pointer-events-auto w-full max-w-[440px] mx-auto flex items-center gap-3 rounded-3xl border border-emerald-400/15 bg-slate-900/80 px-4 py-3 backdrop-blur-xl">
-                      <span className="w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center bg-emerald-500/15 shadow-[0_0_18px_rgba(16,185,129,0.25)]">
-                        <ShieldCheck size={24} className="text-emerald-400" aria-hidden />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[16px] font-bold text-white leading-tight">Estás protegido</p>
-                        <p className="mt-0.5 text-[13px] leading-snug text-slate-400">
-                          {gpsEstado === 'ok' ? 'Ubicación activa' : 'Ubicación aproximada'} · Listo para pedir ayuda
-                        </p>
-                      </div>
-                      <span className="self-start mt-1 w-2.5 h-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" aria-hidden />
-                    </div>
-                  )}
-
-                  {/* Barra flotante única: Ruta (izquierda) + SOS (derecha, pulgar), mitad y mitad */}
+                  {/* Tarjeta única: estado en una línea + Ruta (izquierda) y SOS (derecha, pulgar), mismo tamaño */}
                   <div className="pointer-events-auto w-full max-w-[440px] mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
                     {!rutaActiva ? (
-                      <div className="grid grid-cols-2 gap-2.5 p-2.5">
+                      <div className="p-3">
+                        {/* Estado en reposo: solo cuando no hay alerta ni solicitud en curso */}
+                        {!alertaActiva && !sos.abierta && !acomp && (
+                          <p className="mb-3 flex items-center gap-2 px-1 text-[13px] leading-tight">
+                            <ShieldCheck size={16} className="shrink-0 text-emerald-400" aria-hidden />
+                            <span className="font-semibold text-white">Estás protegido</span>
+                            <span className="min-w-0 truncate text-slate-400">
+                              · {gpsEstado === 'ok' ? 'Ubicación activa' : 'Ubicación aproximada'}
+                            </span>
+                          </p>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
                         <BotonIniciarRuta
                           onClick={abrirRuta}
                           buscando={solicitandoRuta || acomp?.estado === 'PENDIENTE'}
                         />
                         <BotonSOS forma="barra" abierta={sos.abierta} onActivar={() => void activarSOS()} />
+                        </div>
                       </div>
                     ) : (
                       <div className="p-3.5">
