@@ -537,11 +537,6 @@ button:active > .icono-alerta {
   opacity: 1;
 }
 
-/* "Qué pasa cuando pides ayuda": la línea entre pasos se ilumina hasta el paso activo */
-.linea-progreso {
-  transform-origin: top;
-  transition: transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .parallax {
@@ -631,13 +626,19 @@ button:active > .icono-alerta {
   animation: progreso-testimonio 5s linear forwards;
 }
 
+/* "Cómo funciona": misma barra bajo el paso activo; su fin pasa al paso siguiente (AVANCE_MS en ComoFunciona) */
+.progreso-paso {
+  animation: progreso-testimonio 5s linear forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tarjeta-carrusel {
     transition: opacity 200ms linear;
   }
 
-  /* Sin animación no hay fin de animación: el carrusel no avanza solo */
-  .progreso-testimonio {
+  /* Sin animación no hay fin de animación: el carrusel y el recorrido no avanzan solos */
+  .progreso-testimonio,
+  .progreso-paso {
     animation: none;
   }
 }
