@@ -109,10 +109,10 @@ body * {
   animation: float-phone 4.5s ease-in-out infinite;
 }
 
-/* Inclinación fija del teléfono del hero (se suma a la del mouse). En móvil es menor para no deformarlo. */
+/* Inclinación fija del teléfono del hero (se suma a la del mouse). En móvil, la misma pose que en escritorio pero más suave. */
 .telefono-3d {
-  --base-rx: 2deg;
-  --base-ry: -6deg;
+  --base-rx: 4deg;
+  --base-ry: -12deg;
 }
 
 @media (min-width: 1024px) {

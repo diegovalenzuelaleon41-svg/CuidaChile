@@ -128,19 +128,19 @@ function CuerpoSOS() {
     <div className="flex h-full items-center justify-center">
       <div className="relative flex items-center justify-center">
         {/* Halos fijos */}
-        <span className="absolute h-[300px] w-[300px] rounded-full bg-red-500/[0.04]" />
-        <span className="absolute h-[236px] w-[236px] rounded-full border border-red-500/20 bg-red-500/[0.06]" />
+        <span className="absolute h-[208px] w-[208px] rounded-full bg-red-500/[0.04] md:h-[300px] md:w-[300px]" />
+        <span className="absolute h-[164px] w-[164px] rounded-full border border-red-500/20 bg-red-500/[0.06] md:h-[236px] md:w-[236px]" />
         {/* Anillos que se expanden, desfasados */}
         {[0, 0.8, 1.6].map((d) => (
           <span
             key={d}
-            className="radar-sos absolute h-44 w-44 rounded-full border-2 border-red-500/60"
+            className="radar-sos absolute h-32 w-32 rounded-full border-2 border-red-500/60 md:h-48 md:w-48"
             style={{ animationDelay: `${d}s` }}
           />
         ))}
-        <span className="relative flex h-44 w-44 flex-col items-center justify-center rounded-full border-4 border-red-300/30 bg-[radial-gradient(circle_at_50%_35%,#F87171,#DC2626_70%)] text-white shadow-[0_0_80px_rgba(239,68,68,0.4),inset_0_-10px_30px_rgba(127,29,29,0.5)]">
-          <span className="text-[48px] font-extrabold leading-none tracking-wide">SOS</span>
-          <span className="mt-2 text-[14px] font-medium opacity-90">Mantén 1,5&nbsp;s</span>
+        <span className="relative flex h-32 w-32 max-w-full flex-col md:h-48 md:w-48 items-center justify-center rounded-full border-4 border-red-300/30 bg-[radial-gradient(circle_at_50%_35%,#F87171,#DC2626_70%)] text-white shadow-[0_0_80px_rgba(239,68,68,0.4),inset_0_-10px_30px_rgba(127,29,29,0.5)]">
+          <span className="text-[36px] font-extrabold leading-none tracking-wide md:text-[52px]">SOS</span>
+          <span className="mt-1.5 text-[13px] font-medium opacity-90 md:mt-2 md:text-[14px]">Mantén 1,5&nbsp;s</span>
         </span>
       </div>
     </div>
@@ -306,7 +306,7 @@ export default function ComoFunciona() {
   return (
     <section
       id="como-funciona"
-      className="relative isolate scroll-mt-20 overflow-x-clip bg-[radial-gradient(ellipse_80%_60%_at_60%_40%,#0A1128,#050B14_70%)] pb-12 pt-20 md:pt-28"
+      className="relative isolate scroll-mt-20 overflow-x-clip bg-[radial-gradient(ellipse_80%_60%_at_60%_40%,#0A1128,#050B14_70%)] py-12 md:pb-16 md:pt-28"
       aria-labelledby="titulo-como-funciona"
     >
       {/* overflow-x-clip y no overflow-hidden: corta los resplandores sin romper el sticky */}
@@ -315,12 +315,12 @@ export default function ComoFunciona() {
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-[#050B14]" />
       </div>
 
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 lg:grid-cols-12 lg:gap-x-12 lg:gap-y-10 lg:px-8">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-4 md:gap-10 md:px-8 lg:grid-cols-12 lg:gap-x-12 lg:gap-y-10 lg:px-8">
         {/* Título (móvil: primero) */}
         <div className="lg:col-span-5">
           <h2
             id="titulo-como-funciona"
-            className="text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
+            className="text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white sm:text-[38px] md:text-[52px]"
           >
             Qué pasa cuando
             <br />
@@ -328,14 +328,14 @@ export default function ComoFunciona() {
           </h2>
         </div>
 
-        {/* Panel (móvil: segundo, sin sticky). Ocupa las dos filas de la derecha para quedar fijo durante todos los pasos. */}
-        <div className="lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">
+        {/* Panel (móvil: al final, bajo los pasos, sin sticky). En escritorio ocupa las dos filas de la derecha para quedar fijo durante todos los pasos. */}
+        <div className="order-last lg:order-none lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">
           <div ref={refPanel} className="relative flex justify-center lg:sticky lg:top-24">
             <PanelSOS activo={activo} />
           </div>
         </div>
 
-        {/* Pasos con línea de tiempo (móvil: tercero). pb: el último paso alcanza la altura del panel. */}
+        {/* Pasos con línea de tiempo (móvil: segundo). pb: el último paso alcanza la altura del panel. */}
         <div className="lg:col-span-5 lg:pb-40">
         <ol>
           {PASOS.map((p, i) => {
@@ -349,14 +349,14 @@ export default function ComoFunciona() {
                 }}
                 data-paso={i}
                 aria-current={esActivo ? 'step' : undefined}
-                className={`relative flex gap-4 ${ultimo ? '' : 'pb-6 lg:pb-16'}`}
+                className={`relative flex gap-3 sm:gap-4 ${ultimo ? '' : 'pb-6 lg:pb-16'}`}
               >
                 {/* Línea punteada hasta el número siguiente */}
                 {!ultimo && (
-                  <span aria-hidden className="absolute bottom-0 left-6 top-14 -translate-x-px border-l-2 border-dashed border-blue-500/50" />
+                  <span aria-hidden className="absolute bottom-0 left-5 top-12 -translate-x-px sm:left-6 sm:top-14 border-l-2 border-dashed border-blue-500/50" />
                 )}
                 <span
-                  className={`relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[15px] font-bold tabular-nums transition-[background-color,color,box-shadow] duration-300 ${
+                  className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[14px] sm:h-12 sm:w-12 sm:text-[15px] font-bold tabular-nums transition-[background-color,color,box-shadow] duration-300 ${
                     esActivo
                       ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.8)]'
                       : 'border border-white/10 bg-slate-800 text-slate-400'
@@ -378,7 +378,7 @@ export default function ComoFunciona() {
                       esActivo ? 'opacity-100' : 'opacity-0'
                     }`}
                   />
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-950 to-slate-900">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 sm:h-14 sm:w-14 bg-gradient-to-br from-blue-950 to-slate-900">
                     <p.Icono size={26} strokeWidth={1.75} className={`${p.color} ${esActivo ? p.brillo : ''}`} aria-hidden />
                   </span>
                   <div>
@@ -400,7 +400,7 @@ export default function ComoFunciona() {
             )
           })}
         </ol>
-        <p className="mt-8 pl-16 text-[14px] text-slate-400">¿Fue un error? Cancelas la alerta con tu PIN de 4&nbsp;dígitos.</p>
+        <p className="mt-8 pl-[52px] text-[14px] text-slate-400 sm:pl-16">¿Fue un error? Cancelas la alerta con tu PIN de 4&nbsp;dígitos.</p>
         </div>
       </div>
     </section>

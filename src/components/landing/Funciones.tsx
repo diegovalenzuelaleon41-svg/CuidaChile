@@ -42,7 +42,7 @@ export default function Funciones() {
   return (
     <section
       id="funciones"
-      className="relative isolate scroll-mt-20 overflow-hidden bg-[#050B14] px-5 py-20 md:px-8 md:py-28"
+      className="relative isolate scroll-mt-20 overflow-hidden bg-[#050B14] px-4 py-12 md:px-8 md:py-28"
       aria-labelledby="titulo-funciones"
     >
       {/* Fondo: resplandor azul arriba a la izquierda */}
@@ -53,13 +53,13 @@ export default function Funciones() {
       <div
         ref={ref}
         data-visto={visto || undefined}
-        className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-14"
+        className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 md:gap-12 lg:grid-cols-12 lg:gap-14"
       >
         {/* Izquierda (móvil: arriba): escudo, título e indicadores */}
         <div className="revelar text-center lg:col-span-5 lg:text-left">
           <h2
             id="titulo-funciones"
-            className="text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
+            className="text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white sm:text-[38px] md:text-[52px]"
           >
             Para el camino
             <br />
@@ -93,14 +93,14 @@ export default function Funciones() {
               <li key={t} className="revelar" style={{ transitionDelay: `${120 + i * 90}ms` }}>
                 {/* El hover va en el hijo: .revelar ya usa transform en el li */}
                 <div
-                  className={`flex items-center gap-4 rounded-2xl border p-4 backdrop-blur-md sm:p-5 transition-[transform,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:border-blue-400/70 hover:shadow-[0_0_28px_rgba(59,130,246,0.25)] sm:gap-5 ${
+                  className={`flex items-center gap-3 rounded-2xl border p-4 backdrop-blur-md md:p-6 transition-[transform,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:border-blue-400/70 hover:shadow-[0_0_28px_rgba(59,130,246,0.25)] sm:gap-4 md:gap-5 ${
                     destacada
                       ? 'border-blue-500/50 bg-slate-900/60 shadow-[0_0_20px_rgba(59,130,246,0.15)]'
                       : 'border-slate-800 bg-slate-900/40'
                   }`}
                 >
                   <div
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-700/60 bg-slate-800"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700/60 bg-slate-800 md:h-12 md:w-12"
                     aria-hidden
                   >
                     {Icono ? (
@@ -118,7 +118,7 @@ export default function Funciones() {
                     <p className="mt-1 text-[14px] leading-relaxed text-slate-400 md:text-[15px]">{d}</p>
                   </div>
                   {/* Función disponible hoy en la app */}
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-teal-400/20 bg-teal-500/10">
+                  <span className="flex h-7 w-7 shrink-0 items-center md:h-8 md:w-8 justify-center rounded-full border border-teal-400/20 bg-teal-500/10">
                     <CheckCircle2 size={18} strokeWidth={2} className="text-teal-400" aria-label="Disponible" />
                   </span>
                 </div>

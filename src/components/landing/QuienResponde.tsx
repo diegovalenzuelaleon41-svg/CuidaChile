@@ -37,7 +37,7 @@ export default function QuienResponde() {
   return (
     <section
       id="confianza"
-      className="scroll-mt-20 border-t border-white/5 bg-[#050B14] px-5 py-20 md:px-8 md:py-28"
+      className="scroll-mt-20 border-t border-white/5 bg-[#050B14] px-4 py-12 md:px-8 md:py-28"
       aria-labelledby="titulo-confianza"
     >
       <div ref={ref} data-visto={visto || undefined} className="mx-auto max-w-6xl">
@@ -45,7 +45,7 @@ export default function QuienResponde() {
           <div className="lg:col-span-7">
             <h2
               id="titulo-confianza"
-              className="text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
+              className="text-[32px] sm:text-[38px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white md:text-[52px]"
             >
               Quién está del otro lado
             </h2>

@@ -1,9 +1,11 @@
-import { useRef, type MouseEvent } from 'react'
+import { useEffect, useRef, type MouseEvent } from 'react'
 import {
   Bell, Briefcase, Crosshair, History, Home, MapPinned, Minus, Plus, Search, ShieldCheck, Siren, Star, User, Users,
 } from 'lucide-react'
 
 const MAX_TILT = 7
+/** Grados que hay que girar el celular para llegar a la inclinación máxima del mockup. */
+const GIRO_MAX = 20
 
 const ACCESOS = [
   { t: 'Casa', Icono: Home },
@@ -21,7 +23,8 @@ const TABS = [
 /**
  * Teléfono del hero con la pantalla de inicio real de la app (/usuario): mapa oscuro teñido,
  * pin "Tú" con ondas, buscador con accesos rápidos, estado y la barra Ruta + SOS.
- * Inclinación 3D fija (.telefono-3d) más la del mouse. Decorativo: la pantalla es aria-hidden.
+ * Inclinación 3D fija (.telefono-3d) más la del mouse; en móvil, más suave, al 80 % y siguiendo el giroscopio.
+ * Decorativo: la pantalla es aria-hidden.
  */
 export default function FloatingPhoneMockup() {
   const zoneRef = useRef<HTMLDivElement | null>(null)
@@ -44,12 +47,80 @@ export default function FloatingPhoneMockup() {
     tiltRef.current?.style.setProperty('--ry', '0deg')
   }
 
+  // Giroscopio (pantallas táctiles): el mockup se inclina al girar el celular en la mano.
+  // Se mide contra la pose en que se abrió la página, así no importa cómo lo sostenga.
+  // Donde el navegador pide permiso para el sensor (Chrome reciente) se pide sin toque: si lo concede
+  // en silencio se activa; si exige un toque (iPhone/Safari) se rechaza y queda la pose fija, sin aviso al entrar.
+  useEffect(() => {
+    const tilt = tiltRef.current
+    if (!tilt || typeof DeviceOrientationEvent === 'undefined') return
+    if (!window.matchMedia('(pointer: coarse)').matches) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    let base: { beta: number; gamma: number } | null = null
+    let frame = 0
+    let rx = 0
+    let ry = 0
+    const limitar = (v: number) => Math.max(-1, Math.min(1, v / GIRO_MAX)) * MAX_TILT
+
+    function alGirar(e: DeviceOrientationEvent) {
+      if (e.beta == null || e.gamma == null) return
+      base ??= { beta: e.beta, gamma: e.gamma }
+      let adelante = e.beta - base.beta
+      let lado = e.gamma - base.gamma
+      // En horizontal los ejes del sensor se cruzan con los de la pantalla.
+      const angulo = screen.orientation?.angle ?? 0
+      if (angulo === 90) [adelante, lado] = [-lado, adelante]
+      else if (angulo === 270) [adelante, lado] = [lado, -adelante]
+      rx = -limitar(adelante)
+      ry = limitar(lado)
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0
+          tilt!.style.setProperty('--rx', `${rx.toFixed(2)}deg`)
+          tilt!.style.setProperty('--ry', `${ry.toFixed(2)}deg`)
+        })
+      }
+    }
+
+    // Al cambiar de orientación, la pose de referencia se vuelve a tomar.
+    const reiniciar = () => {
+      base = null
+    }
+
+    let activo = true
+    const escuchar = () => {
+      if (!activo) return
+      window.addEventListener('deviceorientation', alGirar)
+      screen.orientation?.addEventListener('change', reiniciar)
+    }
+    const pedirPermiso = (DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<PermissionState> })
+      .requestPermission
+    if (typeof pedirPermiso === 'function') {
+      pedirPermiso.call(DeviceOrientationEvent).then(
+        (estado) => estado === 'granted' && escuchar(),
+        () => {
+          /* exige un toque (iPhone): queda la pose fija */
+        },
+      )
+    } else {
+      escuchar()
+    }
+
+    return () => {
+      activo = false
+      window.removeEventListener('deviceorientation', alGirar)
+      screen.orientation?.removeEventListener('change', reiniciar)
+      cancelAnimationFrame(frame)
+    }
+  }, [])
+
   return (
     <div
       ref={zoneRef}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      className="relative mx-auto flex w-full max-w-[560px] justify-center pb-10"
+      className="relative mx-auto flex w-full max-w-[560px] justify-center pb-10 max-md:-my-[64px] max-md:scale-[0.8]"
     >
       {/* Resplandor rojo bajo la zona del SOS: el único acento cálido de la página */}
       <div aria-hidden className="pointer-events-none absolute bottom-[14%] left-1/2 h-40 w-72 -translate-x-1/4 rounded-full bg-red-600/20 blur-3xl" />
