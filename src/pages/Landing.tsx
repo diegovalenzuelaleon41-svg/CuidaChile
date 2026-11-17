@@ -10,6 +10,10 @@ import Funciones from '../components/landing/Funciones'
 import CtaFinal from '../components/landing/CtaFinal'
 import QuienResponde from '../components/landing/QuienResponde'
 import FraseRevelada from '../components/landing/FraseRevelada'
+import Cifras from '../components/landing/Cifras'
+import Testimonios from '../components/landing/Testimonios'
+import Privacidad from '../components/landing/Privacidad'
+import ContadorEnVivo from '../components/landing/ContadorEnVivo'
 import { useParallax } from '../hooks/useParallax'
 
 /** Solo datos que la app cumple hoy (ver Funciones y QuienResponde). */
@@ -75,6 +79,8 @@ export default function Landing() {
                 </a>
               </div>
               <p className="mt-3 text-xs text-slate-400">Dejarla lista toma un par de minutos.</p>
+              {/* Cifra real de la base; no se muestra mientras sea menor que el mínimo */}
+              <ContadorEnVivo />
 
               {/* Señales de confianza: en móvil tres columnas (ícono sobre texto); desde sm en fila con separadores */}
               <ul className="mt-8 grid grid-cols-3 divide-x divide-white/10 text-xs text-slate-300 sm:flex sm:flex-wrap sm:items-center sm:gap-y-3 sm:text-sm md:mt-10">
@@ -133,9 +139,13 @@ export default function Landing() {
         </section>
 
         <ComoFunciona />
+        <Cifras />
         <Funciones />
         <FraseRevelada />
         <QuienResponde />
+        <Privacidad />
+        {/* Sin testimonios reales no se muestra en producción (ver REALES en Testimonios.tsx) */}
+        <Testimonios />
         <CtaFinal />
       </main>
       <Footer />

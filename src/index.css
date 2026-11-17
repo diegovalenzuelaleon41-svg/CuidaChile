@@ -556,3 +556,188 @@ button:active > .icono-alerta {
     opacity: 1;
   }
 }
+
+/* ── "La realidad que nos une": la matriz de 100 personas se enciende una vez, en orden de lectura ── */
+.punto-cifra[data-encendido] {
+  opacity: 0.15;
+  transition: opacity 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-visto] .punto-cifra[data-encendido] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .punto-cifra[data-encendido] {
+    opacity: 1;
+    transition: none;
+  }
+}
+
+/* Panel "Lo que responde CuidaChile": un barrido de luz cruza la tarjeta cada 7 s */
+.barrido-luz::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: shimmer 7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  pointer-events: none;
+}
+
+/* Pulso que baja por el divisor entre las dos cifras */
+@keyframes pulso-divisor {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(300%);
+  }
+}
+
+.pulso-divisor {
+  animation: pulso-divisor 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barrido-luz::before,
+  .pulso-divisor {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ── "En la vida real": carrusel de testimonios (posiciones en Testimonios.tsx) ── */
+/* Curva con un leve rebote al llegar: se siente como un resorte sin librería de física */
+.tarjeta-carrusel {
+  transition:
+    transform 800ms cubic-bezier(0.34, 1.32, 0.64, 1),
+    opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* Tramo activo de la barra: se llena en AVANCE_MS (Testimonios.tsx) y su fin hace avanzar el carrusel */
+@keyframes progreso-testimonio {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.progreso-testimonio {
+  animation: progreso-testimonio 5s linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarjeta-carrusel {
+    transition: opacity 200ms linear;
+  }
+
+  /* Sin animación no hay fin de animación: el carrusel no avanza solo */
+  .progreso-testimonio {
+    animation: none;
+  }
+}
+
+/* ── Píldora "personas acompañadas ahora mismo": aparece al llegar la cifra ── */
+@keyframes aparecer-pildora {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.aparecer-pildora {
+  animation: aparecer-pildora 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aparecer-pildora {
+    animation-name: hero-render-aparecer;
+  }
+}
+
+/* ── Privacidad: cada ubicación de la ruta de ejemplo aparece una tras otra (data-visto en el padre) ── */
+.punto-ruta {
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-visto] .punto-ruta {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .punto-ruta {
+    transition: none;
+  }
+}
+
+/* Privacidad: la ruta se dibuja sola (pathLength = 100), al mismo ritmo lineal que aparecen sus puntos (DIBUJO_MS) */
+.ruta-trazo {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 2200ms linear 300ms;
+}
+
+[data-visto] .ruta-trazo {
+  stroke-dashoffset: 0;
+}
+
+/* Un destello corto recorre la ruta ya dibujada, cada pocos segundos */
+@keyframes ruta-pulso {
+  0% {
+    stroke-dashoffset: 106;
+    opacity: 0;
+  }
+  10%,
+  90% {
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* Invisible fuera de la animación: así no queda un trazo suelto mientras la ruta se dibuja */
+.ruta-pulso {
+  stroke-dasharray: 6 94;
+  opacity: 0;
+}
+
+[data-visto] .ruta-pulso {
+  animation: ruta-pulso 3.2s cubic-bezier(0.45, 0, 0.55, 1) 2.6s infinite both;
+}
+
+/* El cero entra una vez: aparece y se asienta desde un poco más chico */
+.cero-entrada {
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-visto] .cero-entrada {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ruta-trazo {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+
+  [data-visto] .ruta-pulso {
+    animation: none;
+  }
+
+  .cero-entrada {
+    transform: none;
+  }
+}
