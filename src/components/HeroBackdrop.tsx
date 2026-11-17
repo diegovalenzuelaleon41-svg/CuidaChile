@@ -4,7 +4,7 @@ import FondoConstelacion from './FondoConstelacion'
  * Fondo del hero: base casi negra con degradados radiales, constelación neón animada (canvas) y
  * un horizonte luminoso abajo. Todo decorativo (aria-hidden) y siempre oscuro.
  */
-export default function HeroBackdrop() {
+export default function HeroBackdrop({ horizonte = true }: { horizonte?: boolean }) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden bg-[#050B14]" aria-hidden>
       {/* Degradado radial azul sutil: nace arriba al centro y se apaga hacia los bordes; un segundo foco detrás del teléfono */}
@@ -16,8 +16,10 @@ export default function HeroBackdrop() {
         className="absolute inset-0 h-full w-full [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
       />
 
-      {/* Horizonte luminoso al pie del hero */}
-      <div className="absolute -bottom-[180px] left-1/2 h-[260px] w-[150%] -translate-x-1/2 rounded-[50%] border-t border-blue-400/40 shadow-[0_-12px_60px_rgba(59,130,246,0.35)]" />
+      {/* Horizonte luminoso al pie del hero (el login pone su propio planeta en su lugar) */}
+      {horizonte && (
+        <div className="absolute -bottom-[180px] left-1/2 h-[260px] w-[150%] -translate-x-1/2 rounded-[50%] border-t border-blue-400/40 shadow-[0_-12px_60px_rgba(59,130,246,0.35)]" />
+      )}
     </div>
   )
 }

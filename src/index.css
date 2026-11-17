@@ -285,6 +285,27 @@ button:active > .icono-alerta {
   animation: halo-llamada 1.6s ease-out infinite;
 }
 
+/* Planeta del login: un pulso corto viaja por cada ruta de datos (los paths usan pathLength=100) */
+@keyframes planeta-flujo {
+  from {
+    stroke-dashoffset: 110;
+  }
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+.planeta-flujo {
+  stroke-dasharray: 8 120;
+  animation: planeta-flujo 6.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planeta-flujo {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .float-phone,
   .float-card,
@@ -468,4 +489,14 @@ button:active > .icono-alerta {
 
 .mapa-usuario .maplibregl-ctrl-attrib-button {
   filter: invert(1);
+}
+
+/* Inputs del login: el autocompletado de Chrome no debe pintarlos de blanco o amarillo sobre el fondo oscuro */
+.input-oscuro:-webkit-autofill,
+.input-oscuro:-webkit-autofill:hover,
+.input-oscuro:-webkit-autofill:focus {
+  -webkit-text-fill-color: #fff;
+  caret-color: #22d3ee;
+  box-shadow: 0 0 0 1000px #0f172a inset;
+  transition: background-color 9999s ease-out 0s;
 }
