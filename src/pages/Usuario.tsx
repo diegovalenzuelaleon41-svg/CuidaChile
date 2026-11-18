@@ -8,7 +8,7 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
   Briefcase, CheckCircle2, ChevronRight, Clock3, Crosshair, Home, KeyRound, LocateFixed, MapPin, MapPinned,
-  Copy, EyeOff, MessageCircle, Minus, Moon, Navigation, Plus, Search, Share2, ShieldCheck, Star, Sun, Vibrate, Volume2, VolumeX, X, Zap,
+  Copy, EyeOff, Heart, MessageCircle, Minus, Moon, Navigation, Plus, Search, Share2, ShieldCheck, Star, Sun, Vibrate, Volume2, VolumeX, X, Zap,
 } from 'lucide-react'
 import {
   callar,
@@ -20,8 +20,12 @@ import {
   vozDisponible,
 } from '../lib/voz'
 import { useControlBienestar } from '../hooks/useControlBienestar'
-import { ModalCalificar, ModalTodoBien } from '../components/usuario/ModalesRuta'
+import { useSinRespuesta } from '../hooks/useSinRespuesta'
+import { ModalCalificar, ModalLlegaste, ModalTodoBien } from '../components/usuario/ModalesRuta'
 import AvisarContactos from '../components/usuario/AvisarContactos'
+import ModalLugar from '../components/usuario/ModalLugar'
+import { borrarLugar, cargarLugares, guardarLugar, NOMBRE_LUGAR, type Lugar, type TipoLugar } from '../lib/lugares'
+import { useAcompanantes } from '../hooks/useAcompanantes'
 import CuentaRegresivaSOS from '../components/usuario/CuentaRegresivaSOS'
 import { agitarDisponible, guardarAgitarSOS, leerAgitarSOS, pedirPermisoMovimiento, useAgitar } from '../hooks/useAgitar'
 import { useAuth } from '../auth/AuthContext'
@@ -184,6 +188,15 @@ function teñirMapa(map: maplibregl.Map) {
     } catch { /* capa sin esa propiedad: se deja como viene */ }
   }
 }
+
+/** Distancia aproximada en metros entre dos puntos [lng, lat] (basta para distancias cortas). */
+function metrosEntre(a: [number, number], b: [number, number]) {
+  const k = Math.cos((a[1] * Math.PI) / 180) * 111_320
+  return Math.hypot((a[0] - b[0]) * k, (a[1] - b[1]) * 110_540)
+}
+
+/** A menos de esto del destino, "Llegué" se destaca. */
+const RADIO_LLEGADA_M = 80
 
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -363,6 +376,11 @@ export default function Usuario() {
   // Ruta recién terminada con operador: se pide una nota.
   const [calificar, setCalificar] = useState<string | null>(null)
   const [showCompartirRuta, setShowCompartirRuta] = useState(false)
+  // Casa y Trabajo guardados (src/lib/lugares.ts).
+  const [lugares, setLugares] = useState<Lugar[]>([])
+  const [lugarEditando, setLugarEditando] = useState<TipoLugar | null>(null)
+  // "Llegaste": tras terminar la ruta con "Llegué" (nombres de quienes acompañaban desde el link).
+  const [llegada, setLlegada] = useState<string[] | null>(null)
   // Chat real con el operador de la central (tabla mensajes + Realtime).
   const chat = useChatAcompanamiento(acomp?.id ?? null, 'usuario')
   // Mensajes del operador ya vistos (se marca al abrir/cerrar el chat).
@@ -813,6 +831,17 @@ export default function Usuario() {
     const t = setTimeout(() => setAviso(null), 2600)
     return () => clearTimeout(t)
   }, [aviso])
+
+  useEffect(() => {
+    if (!user) return
+    let cancelado = false
+    void cargarLugares().then((l) => {
+      if (!cancelado) setLugares(l)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [user])
 
   // Cargar contactos + historial (tolerante si la migración 006 aún no corre)
   useEffect(() => {
@@ -1435,6 +1464,44 @@ export default function Usuario() {
 
   useAgitar(agitarSOS && !showSosModal && !cuentaSOS && !sos.abierta, () => setCuentaSOS('agitar'))
 
+  // SOS sin operador a los 45 s: se dice con honestidad, se vuelve a mostrar la pantalla SOS
+  // (con el 133 y los contactos al frente) aunque la persona la haya ocultado.
+  const sinRespuesta = useSinRespuesta(
+    sos.abierta ? sos.alerta?.id ?? null : null,
+    sos.alerta?.estado === 'activa',
+    sos.alerta?.creada_en ?? null,
+    () => {
+      setShowSosModal(true)
+      if (!discreto) {
+        try {
+          navigator.vibrate?.([400, 200, 400])
+        } catch {
+          /* sin vibración */
+        }
+      }
+      if (vozSOSRef.current) hablar('Ningún operador ha tomado tu alerta todavía. Llama al 133 y avisa a tus contactos.')
+    },
+  )
+
+  // Contactos que acompañan desde el link de seguimiento, en el SOS o la ruta abierta.
+  const acompanantes = useAcompanantes(
+    sos.abierta && sos.alerta
+      ? { alertaId: sos.alerta.id }
+      : acomp && (acomp.estado === 'PENDIENTE' || acomp.estado === 'EN_CURSO')
+        ? { acompanamientoId: acomp.id }
+        : null,
+    (nombre) => {
+      setAviso(`${nombre}: "Aquí estoy"`)
+      if (discreto) return
+      try {
+        navigator.vibrate?.(120)
+      } catch {
+        /* sin vibración */
+      }
+    },
+  )
+  const nombresAcompanando = acompanantes.filter((a) => a.activo).map((a) => a.nombre)
+
   const estadoPantallaSos: EstadoPantallaSOS = sosError
     ? 'error'
     : sos.enviando || !sos.alerta
@@ -1495,18 +1562,22 @@ export default function Usuario() {
       } catch { return null }
     })()
     if (!c || previewCargando) return
+    setSeleccionandoDestino(false)
+    setCentroMovido(false)
+    previsualizar(c.lat, c.lng, null)
+  }
+
+  /** Vista previa de la ruta hasta (lat, lng). Sin etiqueta, la busca a partir de las coordenadas. */
+  function previsualizar(lat: number, lng: number, etiqueta: string | null) {
     const { pos: p } = estadoRef.current
-    const { lat, lng } = c
-    setPreview({ lat, lng, etiqueta: 'Buscando dirección…' })
+    setPreview({ lat, lng, etiqueta: etiqueta ?? 'Buscando dirección…' })
     setPreviewInfo(null)
     setPreviewLinea(null)
     setPreviewCargando(true)
-    setSeleccionandoDestino(false)
-    setCentroMovido(false)
     ;(async () => {
       try {
         const [dir, ruta] = await Promise.all([
-          direccionDesdeCoords(lat, lng).catch(() => null),
+          etiqueta ?? direccionDesdeCoords(lat, lng).catch(() => null),
           obtenerRutaCalles([p[0], p[1]], [lng, lat], undefined, puntosReportes()),
         ])
         setPreview({
@@ -1871,8 +1942,9 @@ export default function Usuario() {
   async function terminarRuta() {
     if (!rutaActiva || !user) return
     if (acomp?.estado === 'EN_CURSO' && acomp.operador_id) setCalificar(acomp.id)
+    setLlegada(acompanantes.map((a) => a.nombre))
     void finalizarAcomp()
-    await cerrarRuta('Ruta finalizada. ¡Bien hecho!')
+    await cerrarRuta('Llegaste. Ruta terminada.')
   }
 
   /** Cierre local de la ruta (la termine el usuario o su operador). */
@@ -2091,6 +2163,12 @@ export default function Usuario() {
   }
 
   const elapsedTxt = fmtDur(elapsed)
+  const enDestino =
+    !!rutaActiva &&
+    rutaActiva.destinoLat != null &&
+    rutaActiva.destinoLng != null &&
+    gpsEstado === 'ok' &&
+    metrosEntre(pos, [rutaActiva.destinoLng, rutaActiva.destinoLat]) < RADIO_LLEGADA_M
   const distanciaKm = infoRuta ? (infoRuta.distanciaM / 1000).toFixed(1) : null
   const etaHora =
     rutaActiva && infoRuta
@@ -2156,24 +2234,33 @@ export default function Usuario() {
                 </button>
               </div>
 
-              {/* Accesos rápidos: abren la búsqueda de destino (aún no hay lugares guardados).
+              {/* Accesos rápidos: Casa y Trabajo guardados muestran la ruta al tiro; sin guardar, piden la dirección.
                   Una sola fila deslizable; -mx-3/px-3 deja que se deslicen hasta el borde de la pantalla. */}
               {!rutaActiva && !preview && !seleccionandoDestino && !selReporte && (
                 <div className="pointer-events-auto -mx-3 flex gap-2 overflow-x-auto px-3 scrollbar-hide sm:mx-0 sm:w-[400px] sm:px-0">
                   {([
-                    { t: 'Casa', Icono: Home },
-                    { t: 'Trabajo', Icono: Briefcase },
-                    { t: 'Otro', Icono: Star },
-                  ] as const).map(({ t, Icono }) => (
+                    { t: 'Casa', tipo: 'casa', Icono: Home },
+                    { t: 'Trabajo', tipo: 'trabajo', Icono: Briefcase },
+                    { t: 'Otro', tipo: null, Icono: Star },
+                  ] as const).map(({ t, tipo, Icono }) => {
+                    const lugar = tipo ? lugares.find((l) => l.tipo === tipo) : undefined
+                    return (
                     <button
                       key={t}
-                      onClick={abrirRuta}
+                      onClick={() => {
+                        if (!tipo) abrirRuta()
+                        else if (lugar) previsualizar(lugar.lat, lugar.lng, lugar.direccion)
+                        else setLugarEditando(tipo)
+                      }}
+                      aria-label={tipo && !lugar ? `Guardar ${t}` : lugar ? `Ruta a ${t}` : 'Otro destino'}
                       className="h-9 shrink-0 flex items-center gap-1.5 rounded-full border border-white/10 bg-slate-900/80 px-3.5 text-[13px] font-medium text-slate-100 backdrop-blur-md hover:border-blue-400/40 hover:bg-slate-800/80 transition-colors"
                     >
                       <Icono size={15} className="text-blue-400" aria-hidden />
                       {t}
+                      {tipo && !lugar && <Plus size={13} className="text-slate-400" aria-hidden />}
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -2463,6 +2550,17 @@ export default function Usuario() {
                         <p className="mt-1 text-[15px] font-bold text-white leading-snug">
                           Tu viaje está siendo monitoreado
                         </p>
+                        {nombresAcompanando.length > 0 && (
+                          <p className="mt-1 flex items-center gap-1.5 text-[12px] font-semibold text-cyan-300">
+                            <Heart size={13} className="shrink-0" aria-hidden />
+                            <span className="truncate">
+                              {nombresAcompanando.join(', ')} {nombresAcompanando.length === 1 ? 'te acompaña' : 'te acompañan'}
+                            </span>
+                          </p>
+                        )}
+                        {enDestino && (
+                          <p className="mt-1 text-[12px] font-semibold text-emerald-300">Estás en tu destino. Toca «Llegué» para terminar.</p>
+                        )}
                         <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] leading-snug text-slate-400 tabular-nums">
                           <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                             <Clock3 size={13} className="text-[#60A5FA]" />
@@ -2496,9 +2594,14 @@ export default function Usuario() {
                           </button>
                           <button
                             onClick={terminarRuta}
-                            className="flex-[3] min-w-0 h-12 rounded-xl border border-white/15 px-2 text-[14px] font-semibold text-slate-200 hover:bg-white/10 transition-colors"
+                            aria-label="Llegué: terminar la ruta"
+                            className={`flex-[3] min-w-0 h-12 rounded-xl border px-2 text-[14px] font-semibold transition-colors ${
+                              enDestino
+                                ? 'border-emerald-400 bg-emerald-600 text-white hover:bg-emerald-500'
+                                : 'border-white/15 text-slate-200 hover:bg-white/10'
+                            }`}
                           >
-                            Finalizar
+                            Llegué
                           </button>
                         </div>
                       </div>
@@ -2543,6 +2646,35 @@ export default function Usuario() {
                     </div>
                   </section>
                   <StatsRuta elapsed={elapsedTxt} conRuta={!!rutaActiva} acc={acc} nContactos={contactos.length} />
+                  <div className="card w-full p-4">
+                    <p className="text-[14px] font-semibold text-heading dark:text-white">Mis lugares</p>
+                    <p className="text-[12px] text-muted dark:text-slate-400">Para iniciar la ruta con un toque. Solo tú los ves.</p>
+                    <ul className="mt-1">
+                      {(['casa', 'trabajo'] as const).map((tipo) => {
+                        const lugar = lugares.find((l) => l.tipo === tipo)
+                        const Icono = tipo === 'casa' ? Home : Briefcase
+                        return (
+                          <li key={tipo}>
+                            <button
+                              onClick={() => setLugarEditando(tipo)}
+                              className="flex w-full items-center gap-3 py-2.5 text-left"
+                            >
+                              <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                                <Icono size={19} />
+                              </span>
+                              <span className="flex-1 min-w-0">
+                                <span className="block text-[14px] font-semibold text-heading dark:text-white">{NOMBRE_LUGAR[tipo]}</span>
+                                <span className="block truncate text-[12px] text-muted dark:text-slate-400">
+                                  {lugar ? lugar.direccion : 'Sin guardar'}
+                                </span>
+                              </span>
+                              <ChevronRight size={18} className="text-faint dark:text-slate-500 shrink-0" />
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
                   {/* Tema y cerrar sesión: fuera del header para despejarlo */}
                   <button
                     onClick={toggleTheme}
@@ -2845,6 +2977,8 @@ export default function Usuario() {
           alertaId={sos.abierta ? sos.alerta?.id ?? null : null}
           contactos={contactos}
           discreto={discreto}
+          sinRespuesta={sinRespuesta}
+          acompanantes={sos.abierta ? nombresAcompanando : []}
         />
       )}
 
@@ -2860,7 +2994,41 @@ export default function Usuario() {
         />
       )}
 
-      {calificar && (
+      {llegada && <ModalLlegaste acompanantes={llegada} contactos={contactos} onCerrar={() => setLlegada(null)} />}
+
+      {lugarEditando && user && (
+        <ModalLugar
+          tipo={lugarEditando}
+          actual={lugares.find((l) => l.tipo === lugarEditando) ?? null}
+          obtenerGps={() => gpsRealRef.current}
+          onGuardar={async (l) => {
+            const err = await guardarLugar(l, user.id)
+            if (err) return err
+            setLugares((prev) => [...prev.filter((x) => x.tipo !== l.tipo), l])
+            setLugarEditando(null)
+            setAviso(`Lugar guardado: ${NOMBRE_LUGAR[l.tipo]}.`)
+            return null
+          }}
+          onBorrar={
+            lugares.some((l) => l.tipo === lugarEditando)
+              ? () => {
+                  const tipo = lugarEditando
+                  void borrarLugar(tipo).then((ok) => {
+                    if (!ok) {
+                      setAviso('No pudimos quitar el lugar.')
+                      return
+                    }
+                    setLugares((prev) => prev.filter((x) => x.tipo !== tipo))
+                    setLugarEditando(null)
+                  })
+                }
+              : null
+          }
+          onCerrar={() => setLugarEditando(null)}
+        />
+      )}
+
+      {calificar && !llegada && (
         <ModalCalificar
           acompanamientoId={calificar}
           operador={null}

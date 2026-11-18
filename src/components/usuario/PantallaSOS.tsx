@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Flashlight,
   FlashlightOff,
+  Heart,
   Loader2,
   MapPinOff,
   Megaphone,
@@ -10,6 +11,7 @@ import {
   Mic,
   MicOff,
   Phone,
+  PhoneCall,
   PhoneOff,
   RotateCcw,
   Volume2,
@@ -48,6 +50,10 @@ interface Props {
   contactos: Contacto[]
   /** Modo discreto: sin rojo que llame la atención y sin sirena ni linterna. */
   discreto: boolean
+  /** El SOS lleva un rato abierto sin que ningún operador lo tome (useSinRespuesta). */
+  sinRespuesta: boolean
+  /** Quienes ven su ubicación desde el link de seguimiento, ahora mismo. */
+  acompanantes: string[]
 }
 
 function capitalizar(nombre: string) {
@@ -75,18 +81,24 @@ export default function PantallaSOS({
   alertaId,
   contactos,
   discreto,
+  sinRespuesta,
+  acompanantes,
 }: Props) {
   const [confirmando, setConfirmando] = useState(false)
   const abierta = estado === 'activa' || estado === 'en_atencion'
   const operador = operadorNombre ? capitalizar(operadorNombre) : null
+  // Nadie tomó la alerta: el 133 pasa a ser la acción principal y los contactos suben de prioridad.
+  const sinOperador = estado === 'activa' && sinRespuesta
 
   const subtitulo =
     estado === 'enviando'
       ? 'Enviando tu alerta a la central…'
       : estado === 'error'
         ? 'Tu alerta no llegó a la central'
-        : estado === 'activa'
-          ? 'Tu alerta llegó a la central. Buscando un operador…'
+        : sinOperador
+          ? 'Tu alerta sigue abierta, pero ningún operador la ha tomado todavía'
+          : estado === 'activa'
+            ? 'Tu alerta llegó a la central. Buscando un operador…'
           : operador
             ? `Operador ${operador} ha recibido tu alerta`
             : 'Un operador ha recibido tu alerta'
@@ -164,9 +176,17 @@ export default function PantallaSOS({
           </p>
         )}
 
+        {abierta && acompanantes.length > 0 && (
+          <p className="mt-2 flex items-center gap-1.5 text-[13px] font-medium text-cyan-200">
+            <Heart size={14} className="shrink-0" aria-hidden />
+            {acompanantes.join(', ')} {acompanantes.length === 1 ? 'está viendo' : 'están viendo'} tu ubicación
+          </p>
+        )}
+
         {/* ── 2. Comunicación ── */}
         <TarjetaComunicacion
           estado={estado}
+          sinOperador={sinOperador}
           operador={operador}
           llamada={llamada}
           chatNoLeidos={chatNoLeidos}
@@ -180,7 +200,14 @@ export default function PantallaSOS({
         />
 
         {/* ── 3. Contactos: link para que vean dónde estás ── */}
-        {abierta && <AvisarContactos tipo="sos" objetivo={alertaId ? { alertaId } : null} contactos={contactos} />}
+        {abierta && (
+          <AvisarContactos
+            tipo="sos"
+            objetivo={alertaId ? { alertaId } : null}
+            contactos={contactos}
+            destacado={sinOperador}
+          />
+        )}
 
         {/* ── 4. Autoprotección (no en modo discreto: la sirena y la luz delatan) ── */}
         {!discreto && (
@@ -215,17 +242,20 @@ export default function PantallaSOS({
 
         {/* ── 5. Salidas ── */}
         <div className="mt-auto pt-8">
-          {/* Si el SOS no llegó a la central, el 133 pasa a ser la acción principal */}
-          <a
-            href="tel:133"
-            className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl border-2 text-[17px] font-bold text-white transition-colors ${
-              estado === 'error'
-                ? 'border-red-600 bg-red-600 shadow-[0_0_24px_rgba(239,68,68,0.55)] hover:bg-red-500'
-                : 'border-red-500/80 hover:bg-red-500/10 active:bg-red-500/20'
-            }`}
-          >
-            <Phone size={20} className={estado === 'error' ? 'text-white' : 'text-red-400'} /> Llamar al 133 (Carabineros)
-          </a>
+          {/* Si el SOS no llegó a la central, el 133 pasa a ser la acción principal.
+              Sin operador, el 133 ya está arriba en la tarjeta: no se repite. */}
+          {!sinOperador && (
+            <a
+              href="tel:133"
+              className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl border-2 text-[17px] font-bold text-white transition-colors ${
+                estado === 'error'
+                  ? 'border-red-600 bg-red-600 shadow-[0_0_24px_rgba(239,68,68,0.55)] hover:bg-red-500'
+                  : 'border-red-500/80 hover:bg-red-500/10 active:bg-red-500/20'
+              }`}
+            >
+              <Phone size={20} className={estado === 'error' ? 'text-white' : 'text-red-400'} /> Llamar al 133 (Carabineros)
+            </a>
+          )}
           {abierta ? (
             <button
               type="button"
@@ -280,6 +310,7 @@ const BTN_TEXTO = 'mt-2 h-11 w-full text-[15px] font-semibold text-blue-300 hove
 
 function TarjetaComunicacion({
   estado,
+  sinOperador,
   operador,
   llamada,
   chatNoLeidos,
@@ -288,6 +319,7 @@ function TarjetaComunicacion({
   onContestar,
 }: {
   estado: EstadoPantallaSOS
+  sinOperador: boolean
   operador: string | null
   llamada: Props['llamada']
   chatNoLeidos: number
@@ -435,6 +467,25 @@ function TarjetaComunicacion({
             Reintentar llamada
           </button>
         )}
+      </>
+    )
+  } else if (sinOperador) {
+    icono = <PhoneCall size={22} />
+    tono = 'problema'
+    titulo = 'Nadie de la central ha tomado tu alerta'
+    texto =
+      'Puede que ahora no haya operadores conectados. Llama al 133 y avisa a tus contactos. Si un operador la toma, lo verás aquí.'
+    accion = (
+      <>
+        <a
+          href="tel:133"
+          className="flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl bg-red-600 text-[17px] font-bold text-white shadow-[0_0_24px_rgba(239,68,68,0.55)] transition-colors hover:bg-red-500 active:bg-red-700"
+        >
+          <Phone size={20} /> Llamar al 133 (Carabineros)
+        </a>
+        <button type="button" onClick={onAbrirChat} className={BTN_TEXTO}>
+          Escribir igual a la central{chatNoLeidos > 0 ? ` (${chatNoLeidos})` : ''}
+        </button>
       </>
     )
   } else if (estado === 'activa') {

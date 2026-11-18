@@ -24,7 +24,8 @@ export async function crearLinkSeguimiento(objetivo: ObjetivoSeguimiento): Promi
 
 /** Lo que devuelve ver_seguimiento() para la página pública. */
 export interface VistaSeguimiento {
-  estado: 'no_encontrado' | 'terminado' | 'activa' | 'en_atencion' | 'PENDIENTE' | 'EN_CURSO'
+  /** llego: la persona terminó su ruta con "Llegué" (ya no hay ubicación, solo la hora). */
+  estado: 'no_encontrado' | 'terminado' | 'llego' | 'activa' | 'en_atencion' | 'PENDIENTE' | 'EN_CURSO'
   tipo?: 'sos' | 'ruta'
   nombre?: string
   lat?: number | null
@@ -34,6 +35,7 @@ export interface VistaSeguimiento {
   destino_lng?: number | null
   actualizado_en?: string
   atendida?: boolean
+  llego_en?: string
 }
 
 export async function verSeguimiento(token: string): Promise<VistaSeguimiento | null> {
@@ -41,6 +43,75 @@ export async function verSeguimiento(token: string): Promise<VistaSeguimiento | 
   if (error) return null
   return data as VistaSeguimiento
 }
+
+/* ── Contactos que acompañan desde el link ── */
+
+/** Quien acompaña desde el link: activo si su página siguió abierta en los últimos 90 s. */
+export interface Acompanante {
+  visitante: string
+  nombre: string
+  activo: boolean
+  ultimo_toque_en: string | null
+}
+
+/** Acompañantes del SOS o la ruta abierta del usuario. null si falló la consulta. */
+export async function misAcompanantes(objetivo: ObjetivoSeguimiento): Promise<Acompanante[] | null> {
+  const { data, error } = await supabase.rpc('mis_acompanantes', {
+    p_alerta_id: 'alertaId' in objetivo ? objetivo.alertaId : null,
+    p_acompanamiento_id: 'acompanamientoId' in objetivo ? objetivo.acompanamientoId : null,
+  })
+  if (error || !Array.isArray(data)) return null
+  return data as Acompanante[]
+}
+
+/**
+ * Unirse, latido o "Aquí estoy" (toque) desde la página del link. true: quedó registrado;
+ * false: el seguimiento ya terminó o está lleno; null: sin conexión.
+ */
+export async function acompanar(token: string, visitante: string, nombre: string, toque = false): Promise<boolean | null> {
+  const { data, error } = await supabase.rpc('acompanar_seguimiento', {
+    p_token: token,
+    p_visitante: visitante,
+    p_nombre: nombre,
+    p_toque: toque,
+  })
+  if (error) return null
+  return data === true
+}
+
+const CLAVE_VISITANTE = 'cuidachile.visitante'
+const CLAVE_NOMBRE = 'cuidachile.acompanante'
+
+/** Identificador anónimo de este navegador para acompañar (no es una cuenta). */
+export function idVisitante(): string {
+  try {
+    const guardado = localStorage.getItem(CLAVE_VISITANTE)
+    if (guardado && /^[0-9a-f-]{36}$/i.test(guardado)) return guardado
+    const nuevo = crypto.randomUUID()
+    localStorage.setItem(CLAVE_VISITANTE, nuevo)
+    return nuevo
+  } catch {
+    return crypto.randomUUID()
+  }
+}
+
+export function leerNombreAcompanante(): string {
+  try {
+    return localStorage.getItem(CLAVE_NOMBRE) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function guardarNombreAcompanante(nombre: string) {
+  try {
+    localStorage.setItem(CLAVE_NOMBRE, nombre)
+  } catch {
+    /* sin almacenamiento: se vuelve a pedir */
+  }
+}
+
+export const MENSAJE_LLEGADA = 'Llegué bien. Gracias por acompañarme. (CuidaChile)'
 
 /**
  * Teléfono en formato internacional sin "+" para wa.me (Chile por defecto):

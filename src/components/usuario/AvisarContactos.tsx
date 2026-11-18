@@ -16,13 +16,15 @@ interface Props {
   contactos: Contacto[]
   /** Tonos para fondo oscuro (pantalla SOS) o para tarjeta normal. */
   tono?: 'sos' | 'tarjeta'
+  /** Nadie de la central tomó el SOS: avisar a los contactos pasa a ser urgente. */
+  destacado?: boolean
 }
 
 /**
  * Manda a los contactos de confianza un link para ver en vivo el SOS o la ruta. El mensaje sale
  * desde el teléfono del usuario (WhatsApp o SMS ya escritos): CuidaChile no lo envía por su cuenta.
  */
-export default function AvisarContactos({ tipo, objetivo, contactos, tono = 'sos' }: Props) {
+export default function AvisarContactos({ tipo, objetivo, contactos, tono = 'sos', destacado = false }: Props) {
   const [link, setLink] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const [copiado, setCopiado] = useState(false)
@@ -44,7 +46,11 @@ export default function AvisarContactos({ tipo, objetivo, contactos, tono = 'sos
 
   const texto = link ? mensajeSeguimiento(tipo, link) : ''
   const oscuro = tono === 'sos'
-  const caja = oscuro ? 'border-slate-800 bg-slate-900/80' : 'border-line bg-white dark:border-slate-700 dark:bg-slate-900'
+  const caja = destacado
+    ? 'border-amber-500/40 bg-amber-500/[0.07]'
+    : oscuro
+      ? 'border-slate-800 bg-slate-900/80'
+      : 'border-line bg-white dark:border-slate-700 dark:bg-slate-900'
   const titulo = oscuro ? 'text-slate-100' : 'text-heading dark:text-white'
   const suave = oscuro ? 'text-slate-400' : 'text-muted dark:text-slate-400'
   const boton =
@@ -68,10 +74,11 @@ export default function AvisarContactos({ tipo, objetivo, contactos, tono = 'sos
   return (
     <section className={`mt-6 rounded-3xl border p-5 ${caja}`} aria-label="Avisar a tus contactos">
       <h3 className={`text-[16px] font-bold ${titulo}`}>
-        {tipo === 'sos' ? 'Avisa a tus contactos' : 'Comparte tu trayecto'}
+        {destacado ? 'Avisa ahora a tus contactos' : tipo === 'sos' ? 'Avisa a tus contactos' : 'Comparte tu trayecto'}
       </h3>
       <p className={`mt-1 text-[13px] leading-snug ${suave}`}>
         Les llega un link para ver dónde estás mientras {tipo === 'sos' ? 'la alerta' : 'la ruta'} siga activa.
+        {destacado && contactos.length === 0 && ' No tienes contactos guardados: comparte el link con alguien de confianza.'}
       </p>
 
       {!link && !error && (

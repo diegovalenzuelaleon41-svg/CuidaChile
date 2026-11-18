@@ -19,6 +19,7 @@ const SECCIONES: { titulo: string; parrafos: string[] }[] = [
     parrafos: [
       'Tu cuenta: nombre, correo y teléfono. Si entras con Google, recibimos tu nombre y tu correo de Google.',
       'Tus contactos de confianza: el nombre, el teléfono y la relación que tú escribes.',
+      'Tus lugares guardados (Casa y Trabajo), si los guardas: la dirección y sus coordenadas. Solo tú los ves; los operadores no.',
       'Tus rutas y alertas: origen, destino, horas de inicio y término, y los mensajes del chat con la central.',
       'Tus reportes del barrio: el lugar, la categoría, la descripción y, si los agregas, una foto o una nota de voz. Los reportes que la central valida se muestran a la comunidad sin tu nombre durante 6 horas.',
       'Tu PIN de seguridad y tu PIN de coacción se guardan como un hash irreversible: nadie, ni siquiera la central, puede leerlos.',
@@ -36,6 +37,7 @@ const SECCIONES: { titulo: string; parrafos: string[] }[] = [
     parrafos: [
       'Los operadores aprobados de la central ven tu nombre, tu teléfono y tu ubicación en vivo mientras atienden tu ruta o tu alerta.',
       'Si compartes un link de seguimiento, quien lo tenga ve tu primer nombre y tu ubicación mientras la ruta o la alerta sigan abiertas, y como máximo 12 horas. Después el link solo dice que terminó.',
+      'Quien acompaña desde el link deja el nombre que escriba y un identificador anónimo de su navegador. Tú ves ese nombre mientras su página siga abierta; esa persona no ve nada más que el link. Si terminas la ruta con «Llegué», el link muestra la hora en que llegaste, sin tu ubicación.',
       'No vendemos tus datos ni los usamos para publicidad.',
     ],
   },

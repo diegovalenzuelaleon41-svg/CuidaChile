@@ -3,6 +3,9 @@ import { Headset, Loader2, Send, X } from 'lucide-react'
 import { MAX_MENSAJE, type EstadoAcompanamiento, type MensajeChat } from '../../lib/acompanamientos'
 import PuntosEscribiendo from '../PuntosEscribiendo'
 
+/** Respuestas de un toque para el SOS: sirven cuando no se puede escribir ni hablar. */
+const RESPUESTAS_RAPIDAS = ['No puedo hablar', 'Me están siguiendo', 'Necesito ayuda ya', 'Sigo bien por ahora'] as const
+
 function fmtHora(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
 }
@@ -55,29 +58,29 @@ export default function ChatConOperador({
     if (el) el.scrollTop = el.scrollHeight
   }, [abierto, mensajes.length, otroEscribiendo])
 
-  // Escape cierra; al abrir, foco en el campo.
+  // Escape cierra; al abrir, foco en el campo (no sobre el SOS: el teclado taparía las respuestas rápidas).
   const onCerrarRef = useRef(onCerrar)
   useEffect(() => {
     onCerrarRef.current = onCerrar
   })
   useEffect(() => {
     if (!abierto) return
-    inputRef.current?.focus()
+    if (!sobreSOS) inputRef.current?.focus()
     const alTeclado = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCerrarRef.current()
     }
     window.addEventListener('keydown', alTeclado)
     return () => window.removeEventListener('keydown', alTeclado)
-  }, [abierto])
+  }, [abierto, sobreSOS])
 
-  async function enviar() {
-    if (!puedeEnviar) return
+  async function enviar(rapida?: string) {
+    if (enviando || !(rapida ?? texto).trim()) return
     setEnviando(true)
     setErrorEnvio(null)
-    const err = await onEnviar(texto)
+    const err = await onEnviar(rapida ?? texto)
     setEnviando(false)
     if (err) setErrorEnvio(err)
-    else setTexto('')
+    else if (!rapida) setTexto('')
   }
 
   if (!abierto) return null
@@ -156,6 +159,23 @@ export default function ChatConOperador({
           <p role="alert" className="border-t border-line bg-[#FEF2F2] px-3 py-1.5 text-[12px] text-sos dark:border-slate-700 dark:bg-[#DC2626]/10">
             {errorEnvio ?? error}
           </p>
+        )}
+
+        {/* Respuestas rápidas: solo en el SOS */}
+        {sobreSOS && (
+          <div className="flex flex-wrap gap-1.5 border-t border-line p-2 dark:border-slate-700" aria-label="Respuestas rápidas">
+            {RESPUESTAS_RAPIDAS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => void enviar(r)}
+                disabled={enviando}
+                className="h-9 rounded-full border border-brand-600/40 bg-brand-50 px-3 text-[13px] font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20"
+              >
+                {r}
+              </button>
+            ))}
+          </div>
         )}
 
         {/* Entrada */}
