@@ -820,3 +820,100 @@ button:active > .icono-alerta {
     animation: none;
   }
 }
+
+/* ── El problema → la compañía (landing, ElProblema.tsx) ──
+   Un solo momento por bloque: la foto se asienta, el texto sube 16 px; después la luz cian entra,
+   el trazo une los dos puntos y la llegada se enciende una vez. Nada queda moviéndose. */
+/* La foto solo aparece (opacidad): escalarla la volvería a ampliar y se vería blanda */
+.problema-foto {
+  opacity: 0;
+  transition: opacity 1400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.problema[data-visto] .problema-foto {
+  opacity: 1;
+}
+/* Parallax solo en escritorio, donde la caja tiene 4 % de sobrante: 0,035 × alto de la sección cabe en él */
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .problema-parallax {
+    transform: translate3d(0, calc(var(--scroll, 0) * 0.035 * 1px), 0);
+  }
+}
+.problema-entra,
+.solucion-entra {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 800ms cubic-bezier(0.22, 1, 0.36, 1) var(--retraso, 0ms),
+    transform 800ms cubic-bezier(0.22, 1, 0.36, 1) var(--retraso, 0ms);
+}
+.problema[data-visto] .problema-entra,
+.solucion[data-visto] .solucion-entra {
+  opacity: 1;
+  transform: none;
+}
+
+.solucion-luz {
+  background:
+    radial-gradient(50% 42% at 50% 42%, rgba(34, 211, 238, 0.14), transparent 72%),
+    radial-gradient(34% 30% at 50% 48%, rgba(59, 130, 246, 0.1), transparent 75%);
+  opacity: 0;
+  transition: opacity 1800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.solucion[data-visto] .solucion-luz {
+  opacity: 1;
+}
+
+.conexion-trazo {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 1300ms cubic-bezier(0.65, 0, 0.35, 1) 200ms;
+}
+.solucion[data-visto] .conexion-trazo {
+  stroke-dashoffset: 0;
+}
+.conexion-llegada {
+  opacity: 0.35;
+  transition: opacity 500ms ease-out 1350ms;
+}
+.solucion[data-visto] .conexion-llegada {
+  opacity: 1;
+}
+.conexion-anillo {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.solucion[data-visto] .conexion-anillo {
+  animation: llegada-anillo 1400ms cubic-bezier(0.22, 1, 0.36, 1) 1400ms 1 both;
+}
+@keyframes llegada-anillo {
+  from { opacity: 0.9; transform: scale(0.5); }
+  to { opacity: 0; transform: scale(1.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .problema-foto,
+  .problema-entra,
+  .solucion-entra {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .problema-parallax {
+    transform: none;
+  }
+  .solucion-luz {
+    opacity: 1;
+    transition: none;
+  }
+  .conexion-trazo {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+  .conexion-llegada {
+    opacity: 1;
+    transition: none;
+  }
+  .solucion[data-visto] .conexion-anillo {
+    animation: none;
+  }
+}

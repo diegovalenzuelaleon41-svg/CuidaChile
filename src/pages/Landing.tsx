@@ -5,6 +5,7 @@ import Header from '../components/Header'
 import Footer from '../components/Footer'
 import FloatingPhoneMockup from '../components/FloatingPhoneMockup'
 import HeroBackdrop from '../components/HeroBackdrop'
+import ElProblema from '../components/landing/ElProblema'
 import ComoFunciona from '../components/landing/ComoFunciona'
 import Funciones from '../components/landing/Funciones'
 import CtaFinal from '../components/landing/CtaFinal'
@@ -143,6 +144,7 @@ export default function Landing() {
           </div>
         </section>
 
+        <ElProblema />
         <ComoFunciona />
         <Cifras />
         <Funciones />
