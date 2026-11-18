@@ -156,7 +156,7 @@ export default function FloatingPhoneMockup() {
                   <span className="text-[14px] font-bold">CuidaChile</span>
                   <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    Protegido
+                    SOS listo
                   </span>
                 </span>
                 <Bell size={16} className="text-slate-300" />
@@ -232,8 +232,8 @@ export default function FloatingPhoneMockup() {
                     <ShieldCheck size={17} className="text-emerald-400" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[12px] font-bold leading-tight">Estás protegido</span>
-                    <span className="block truncate text-[10px] text-slate-400">Ubicación activa · Listo para pedir ayuda</span>
+                    <span className="block text-[12px] font-bold leading-tight">SOS listo</span>
+                    <span className="block truncate text-[10px] text-slate-400">Ubicación activa</span>
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-900/90 p-2">

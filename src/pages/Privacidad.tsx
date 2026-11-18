@@ -21,7 +21,7 @@ const SECCIONES: { titulo: string; parrafos: string[] }[] = [
       'Tus contactos de confianza: el nombre, el teléfono y la relación que tú escribes.',
       'Tus lugares guardados (Casa y Trabajo), si los guardas: la dirección y sus coordenadas. Solo tú los ves; los operadores no.',
       'Tus rutas y alertas: origen, destino, horas de inicio y término, y los mensajes del chat con la central.',
-      'Tus reportes del barrio: el lugar, la categoría, la descripción y, si los agregas, una foto o una nota de voz. Los reportes que la central valida se muestran a la comunidad sin tu nombre durante 6 horas.',
+      'Tus reportes del barrio: el lugar, la categoría, la descripción y, si los agregas, una foto o una nota de voz. Los reportes que la central valida se muestran a la comunidad sin tu nombre durante 6 horas, en una ubicación aproximada (unos 100 metros) para que no se pueda saber desde dónde reportaste.',
       'Tu PIN de seguridad y tu PIN de coacción se guardan como un hash irreversible: nadie, ni siquiera la central, puede leerlos.',
     ],
   },

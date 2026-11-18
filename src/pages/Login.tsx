@@ -76,7 +76,7 @@ export default function Login() {
             <div className="mt-6 space-y-2">
               <h1 className="text-[30px] sm:text-[34px] font-bold leading-tight tracking-tight text-white">Inicia sesión</h1>
               <p className="mx-auto max-w-[340px] text-[15px] leading-relaxed text-slate-400 text-balance">
-                Accede a tu cuenta para mantenerte protegido y conectado con tu red de confianza.
+                Accede a tu cuenta para pedir ayuda cuando la necesites y seguir conectado con tu red de confianza.
               </p>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import type { FeatureCollection } from 'geojson'
 import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -18,7 +19,7 @@ const MARGEN_SIN_SELECCION = 130
 
 const FUENTE_RUTA = 'ruta-acompanamiento'
 const FUENTE_EXTREMOS = 'ruta-acompanamiento-extremos'
-const VACIO: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+const VACIO: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
 export interface PuntoMapa {
   id: string

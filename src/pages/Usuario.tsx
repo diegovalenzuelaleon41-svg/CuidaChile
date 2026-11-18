@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
@@ -8,7 +8,7 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
   Briefcase, CheckCircle2, ChevronRight, Clock3, Crosshair, Home, KeyRound, LocateFixed, MapPin, MapPinned,
-  Copy, EyeOff, Heart, MessageCircle, Minus, Moon, Navigation, Plus, Search, Share2, ShieldCheck, Star, Sun, Vibrate, Volume2, VolumeX, X, Zap,
+  Copy, EyeOff, Heart, List, MessageCircle, Minus, Moon, Navigation, Plus, Search, Share2, ShieldCheck, Star, Sun, Vibrate, Volume2, VolumeX, X, Zap,
 } from 'lucide-react'
 import {
   callar,
@@ -26,6 +26,11 @@ import AvisarContactos from '../components/usuario/AvisarContactos'
 import ModalLugar from '../components/usuario/ModalLugar'
 import { borrarLugar, cargarLugares, guardarLugar, NOMBRE_LUGAR, type Lugar, type TipoLugar } from '../lib/lugares'
 import { useAcompanantes } from '../hooks/useAcompanantes'
+import { useCapasExplora, type PuntoAviso, type PuntoAyuda, type SeleccionMapa } from '../hooks/useCapasExplora'
+import { cargarLugaresAyuda, ETIQUETA_AYUDA, type LugarAyuda } from '../lib/lugaresAyuda'
+import TarjetaMapa, { type ItemMapa } from '../components/usuario/TarjetaMapa'
+import { ICONO_AYUDA } from '../lib/entorno'
+import ListaEntorno, { type FilaEntorno } from '../components/usuario/ListaEntorno'
 import CuentaRegresivaSOS from '../components/usuario/CuentaRegresivaSOS'
 import { agitarDisponible, guardarAgitarSOS, leerAgitarSOS, pedirPermisoMovimiento, useAgitar } from '../hooks/useAgitar'
 import { useAuth } from '../auth/AuthContext'
@@ -33,7 +38,6 @@ import { useTheme } from '../hooks/useTheme'
 import { supabase } from '../lib/supabase'
 import { buscarDirecciones, direccionDesdeCoords, type ResultadoGeo } from '../lib/geocoding'
 import { obtenerRutaCalles } from '../lib/rutaOSRM'
-import Supercluster from 'supercluster'
 import { useSeguridad, type Contacto } from '../store/usoSeguridad'
 import DashboardHeader from '../components/usuario/DashboardHeader'
 import MapaSeguro, { type GpsEstado, type MapEstado } from '../components/usuario/MapaSeguro'
@@ -57,7 +61,7 @@ import type { Acompanamiento } from '../lib/acompanamientos'
 import { ModalRuta, ModalContacto, type FormContacto } from '../components/usuario/Modales'
 import ModalReporte from '../components/usuario/ModalReporte'
 import {
-  ETIQUETA_CATEGORIA, FORM_REPORTE_VACIO, distanciaM, subirEvidencia, tipoAudio,
+  CATEGORIAS_REPORTE, ETIQUETA_CATEGORIA, FORM_REPORTE_VACIO, distanciaM, subirEvidencia, tipoAudio,
   type CategoriaReporte, type EstadoReporte, type FormReporte, type GravedadReporte,
 } from '../lib/reportes'
 import PantallaSOS, { type EstadoPantallaSOS } from '../components/usuario/PantallaSOS'
@@ -120,18 +124,6 @@ function edadCorta(iso: string, ahora = Date.now()): string {
   if (min < 1) return 'ahora mismo'
   if (min < 60) return `hace ${min} min`
   return `hace ${Math.round(min / 60)} h`
-}
-
-/** Polígono circular (radio en metros) para sombrear la zona del reporte. */
-function circuloZona(lng: number, lat: number, radioM = 150, puntos = 28): [number, number][] {
-  const anillo: [number, number][] = []
-  const dLat = radioM / 111_320
-  const dLng = radioM / (111_320 * Math.max(0.3, Math.cos((lat * Math.PI) / 180)))
-  for (let i = 0; i <= puntos; i++) {
-    const a = (i / puntos) * Math.PI * 2
-    anillo.push([lng + Math.cos(a) * dLng, lat + Math.sin(a) * dLat])
-  }
-  return anillo
 }
 
 const SANTIAGO: [number, number] = [-70.6693, -33.4489]
@@ -264,10 +256,6 @@ export default function Usuario() {
   const [reportLoc, setReportLoc] = useState<{ lat: number; lng: number } | null>(null)
   const [selReporte, setSelReporte] = useState(false)
   const [centroRep, setCentroRep] = useState<{ lat: number; lng: number } | null>(null)
-  // Popup único: solo un reporte activo a la vez
-  const [activeReportId, setActiveReportId] = useState<string | null>(null)
-  const popupRef = useRef<maplibregl.Popup | null>(null)
-  const markerElsRef = useRef(new Map<string, HTMLElement>())
   const [showChat, setShowChat] = useState(false)
   const [showSosModal, setShowSosModal] = useState(false)
   const [elapsed, setElapsed] = useState(0)
@@ -398,7 +386,6 @@ export default function Usuario() {
   // (Si se retoma uno ya EN_CURSO tras recargar, no se repite el saludo.)
   const pendienteVistoRef = useRef<string | null>(null)
 
-  const protegido = !alertaActiva
 
   // Perfil
   useEffect(() => {
@@ -849,13 +836,8 @@ export default function Usuario() {
     ;(async () => {
       try {
         const { data, error } = await supabase.from('contactos').select('id,nombre,telefono,relacion').eq('usuario_id', user.id).limit(5)
-        if (!error && data) {
-          setContactos(data.map((c, i) => ({
-            ...c,
-            lat: pos[1] + 0.004 * (i + 1),
-            lng: pos[0] + 0.004 * (i + 1),
-          })) as Contacto[])
-        }
+        // Sin ubicación: CuidaChile no sabe dónde están tus contactos y no la inventa.
+        if (!error && data) setContactos(data as Contacto[])
       } catch { /* noop */ }
       try {
         const { data, error } = await supabase.from('rutas').select('id,origen,destino,inicio,fin,estado')
@@ -993,256 +975,125 @@ export default function Usuario() {
       .sort((a, b) => RANK_GRAVEDAD[a.gravedad] - RANK_GRAVEDAD[b.gravedad])
   }, [reportes])
 
-  const reportesDeps = useMemo(
-    () => `${mapEstado}:${reportesVisibles.map((r) => `${r.id}:${r.gravedad}`).join(',')}`,
-    [mapEstado, reportesVisibles],
+  // ── Explora tu entorno: avisos de vecinos y lugares de ayuda, dibujados por el propio mapa ──
+  const [lugaresAyuda, setLugaresAyuda] = useState<LugarAyuda[]>([])
+  const [verAyuda, setVerAyuda] = useState(true)
+  const [verAvisos, setVerAvisos] = useState(true)
+  const [seleccionMapa, setSeleccionMapa] = useState<SeleccionMapa>(null)
+  const [showListaEntorno, setShowListaEntorno] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    let cancelado = false
+    void cargarLugaresAyuda().then((l) => {
+      if (!cancelado) setLugaresAyuda(l)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [user])
+
+  // Los reportes propios se ven siempre; los de la comunidad, con "Avisos" activo.
+  const avisosEnMapa = useMemo(() => reportesVisibles.filter((r) => r.propio || verAvisos), [reportesVisibles, verAvisos])
+  const ayudaEnMapa = useMemo(() => (verAyuda ? lugaresAyuda : []), [lugaresAyuda, verAyuda])
+  const puntosAvisos = useMemo<PuntoAviso[]>(
+    () =>
+      avisosEnMapa.map((r) => ({
+        id: r.id,
+        lng: r.lng,
+        lat: r.lat,
+        color: r.color,
+        op: r.op,
+        rango: RANK_GRAVEDAD[r.gravedad],
+        icono: r.categoria,
+      })),
+    [avisosEnMapa],
+  )
+  const puntosAyuda = useMemo<PuntoAyuda[]>(
+    () => ayudaEnMapa.map((l) => ({ id: l.id, lng: l.lng, lat: l.lat, icono: l.tipo })),
+    [ayudaEnMapa],
   )
 
-  // ── Clustering: al alejar, burbujas con conteo en vez de pines ──────
-  type ClusterItem = {
-    properties: { cluster?: boolean; cluster_id?: number; point_count?: number; id?: string }
-    geometry: { coordinates: [number, number] }
+  /** Coordenadas de lo seleccionado (para centrar y medir la distancia). */
+  function coordsDe(sel: SeleccionMapa): { lng: number; lat: number } | null {
+    if (!sel) return null
+    const x = sel.tipo === 'aviso' ? reportesVisibles.find((r) => r.id === sel.id) : lugaresAyuda.find((l) => l.id === sel.id)
+    return x ? { lng: x.lng, lat: x.lat } : null
   }
-  const clusterIdx = useMemo(() => {
-    const idx = new Supercluster({ radius: 60, maxZoom: 15 })
-    idx.load(
-      reportesVisibles.map((r) => ({
-        type: 'Feature' as const,
-        properties: { id: r.id },
-        geometry: { type: 'Point' as const, coordinates: [r.lng, r.lat] as [number, number] },
-      })),
-    )
-    return idx
-  }, [reportesVisibles])
 
-  const [clusters, setClusters] = useState<ClusterItem[]>([])
-
-  const actualizarClusters = useCallback(() => {
+  // Al elegir algo, el mapa lo centra un poco más arriba: abajo va la tarjeta.
+  function elegirEnMapa(sel: SeleccionMapa) {
+    setSeleccionMapa(sel)
+    const c = coordsDe(sel)
     const map = mapObj.current
-    if (!map) return
+    if (!c || !map) return
     try {
-      const b = map.getBounds()
-      setClusters(
-        clusterIdx.getClusters(
-          [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-          Math.floor(map.getZoom()),
-        ) as unknown as ClusterItem[],
-      )
+      const reducir = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      map.easeTo({ center: [c.lng, c.lat], offset: [0, -90], duration: reducir ? 0 : 450 })
     } catch { /* noop */ }
-  }, [clusterIdx])
+  }
 
-  // Recalcular clusters al mover/zoom y cuando el mapa o los datos están listos
-  useEffect(() => {
-    const map = mapObj.current
-    if (!map || mapEstado !== 'listo') return
-    actualizarClusters()
-    map.on('moveend', actualizarClusters)
-    return () => {
-      try {
-        map.off('moveend', actualizarClusters)
-      } catch { /* noop */ }
+  useCapasExplora({
+    mapaRef: mapObj,
+    listo: mapEstado === 'listo',
+    estiloKey,
+    avisos: puntosAvisos,
+    ayuda: puntosAyuda,
+    seleccion: seleccionMapa,
+    onSeleccion: elegirEnMapa,
+  })
+
+  // Lo seleccionado, si sigue existiendo (un aviso puede vencer mientras se mira).
+  const itemMapa: ItemMapa | null = (() => {
+    if (!seleccionMapa) return null
+    if (seleccionMapa.tipo === 'aviso') {
+      const r = reportesVisibles.find((x) => x.id === seleccionMapa.id)
+      return r
+        ? { tipo: 'aviso', id: r.id, categoria: r.categoria, descripcion: r.descripcion, creadoEn: r.creado_en, estado: r.estado, propio: r.propio, color: r.color }
+        : null
     }
-  }, [mapEstado, clusterIdx, actualizarClusters])
+    const l = lugaresAyuda.find((x) => x.id === seleccionMapa.id)
+    return l ? { tipo: 'ayuda', id: l.id, lugar: l } : null
+  })()
+  const coordsItem = coordsDe(seleccionMapa)
+  const distanciaItem = coordsItem && gpsEstado === 'ok' ? distanciaM({ lng: pos[0], lat: pos[1] }, coordsItem) : null
 
-  function htmlReporte(r: ReporteVisible, esMio: boolean, oscuro: boolean): string {
-    const txt = oscuro ? '#E2E8F0' : '#0F172A'
-    const sub = oscuro ? '#94A3B8' : '#64748B'
-    return (
-      `<div style="font-family:inherit;min-width:140px">` +
-      `<p style="margin:0;font-size:11px;font-weight:700;color:${r.color}">${ETIQUETA_CATEGORIA[r.categoria]} · ${edadCorta(r.creado_en)}</p>` +
-      (r.descripcion
-        ? `<p style="margin:4px 0 0;font-size:12px;color:${txt}">${r.descripcion.replace(/</g, '&lt;')}</p>`
-        : `<p style="margin:4px 0 0;font-size:12px;color:${sub}">Reporte de la comunidad</p>`) +
-      (r.estado === 'pendiente'
-        ? `<p style="margin:6px 0 0;font-size:11px;font-weight:600;color:${sub}">⏳ En revisión por la central · solo tú lo ves</p>`
-        : ``) +
-      // Borrar solo el propio: el RLS lo refuerza en el servidor.
-      (esMio
-        ? `<button data-eliminar-reporte="${r.id}" style="margin-top:8px;display:inline-flex;align-items:center;gap:4px;border:1px solid #FECACA;background:#FEF2F2;color:#DC2626;font-size:11px;font-weight:700;border-radius:9999px;padding:4px 10px;cursor:pointer">🗑 Eliminar</button>`
-        : ``) +
-      `</div>`
-    )
+  function filasEntorno(): FilaEntorno[] {
+    const desde = gpsEstado === 'ok' ? { lng: pos[0], lat: pos[1] } : null
+    const filas: FilaEntorno[] = [
+      ...avisosEnMapa.map((r) => ({
+        clave: `aviso:${r.id}`,
+        titulo: ETIQUETA_CATEGORIA[r.categoria],
+        subtitulo: r.estado === 'pendiente' ? 'Tu reporte · en revisión' : `Aviso de vecinos · ${edadCorta(r.creado_en)}`,
+        color: r.color,
+        Icono: CATEGORIAS_REPORTE.find((c) => c.id === r.categoria)?.Icono ?? MapPin,
+        distanciaM: desde ? distanciaM(desde, r) : null,
+      })),
+      ...ayudaEnMapa.map((l) => ({
+        clave: `ayuda:${l.id}`,
+        titulo: l.nombre,
+        subtitulo: ETIQUETA_AYUDA[l.tipo],
+        color: '#22D3EE',
+        Icono: ICONO_AYUDA[l.tipo],
+        distanciaM: desde ? distanciaM(desde, l) : null,
+      })),
+    ]
+    return filas.sort((a, b) => (a.distanciaM ?? Infinity) - (b.distanciaM ?? Infinity)).slice(0, 60)
   }
 
-  // Popup ÚNICO: abrir uno cierra automáticamente el anterior.
-  function abrirPopupReporte(r: ReporteVisible) {
-    const map = mapObj.current
-    if (!map) return
-    const esMio = r.propio
-    try {
-      popupRef.current?.remove()
-      popupRef.current = null
-      const popup = new maplibregl.Popup({ offset: 20, closeButton: true, maxWidth: '240px' })
-        .setLngLat([r.lng, r.lat])
-        .setHTML(htmlReporte(r, esMio, document.documentElement.classList.contains('dark')))
-      popup.on('close', () => {
-        popupRef.current = null
-        setActiveReportId(null)
-      })
-      popup.addTo(map)
-      popupRef.current = popup
-      setActiveReportId(r.id)
-      // Botón eliminar (solo propio): vive en HTML, se cablea aquí.
-      if (esMio) {
-        try {
-          popup
-            .getElement()
-            .querySelector('[data-eliminar-reporte]')
-            ?.addEventListener('click', (ev) => {
-              ev.stopPropagation()
-              eliminarReporte(r.id)
-            })
-        } catch { /* noop */ }
-      }
-    } catch { /* noop */ }
-  }
-
-  // Borrar el propio reporte: confirm → DELETE (RLS: solo el dueño) →
-  // filtro local instantáneo + popup cerrado + toast.
+  // Borrar el propio reporte: confirm → DELETE (RLS: solo el dueño) → filtro local + toast.
   async function eliminarReporte(id: string) {
     if (!window.confirm('¿Estás seguro de que deseas eliminar este reporte?')) return
     try {
       const { error } = await supabase.from('reportes').delete().eq('id', id)
       if (error) throw error
       setReportes((prev) => prev.filter((r) => r.id !== id))
-      try {
-        popupRef.current?.remove()
-        popupRef.current = null
-      } catch { /* noop */ }
-      setActiveReportId(null)
+      setSeleccionMapa(null)
       setAviso('Reporte eliminado.')
     } catch {
       setAviso('No se pudo eliminar el reporte. Intenta de nuevo.')
     }
   }
-
-  // Resalta el pin activo (más grande) sin recrear marcadores
-  useEffect(() => {
-    markerElsRef.current.forEach((elm, id) => {
-      elm.style.transform = id === activeReportId ? 'rotate(-45deg) scale(1.35)' : 'rotate(-45deg)'
-    })
-  }, [activeReportId])
-
-  useEffect(() => {
-    const map = mapObj.current
-    if (!map) return
-    if (tab !== 'inicio') {
-      popupRef.current?.remove()
-      popupRef.current = null
-      return
-    }
-    const markers: maplibregl.Marker[] = []
-    markerElsRef.current.clear()
-
-    // ── Zonas: capa fill + borde desde GeoJSON (una sola fuente) ──
-    const dibujarZonas = () => {
-      try {
-        for (const id of ['reportes-zona-fill', 'reportes-zona-linea']) {
-          if (map.getLayer(id)) map.removeLayer(id)
-        }
-        if (map.getSource('reportes-zona')) map.removeSource('reportes-zona')
-        const feats = reportesVisibles.map((r) => ({
-          type: 'Feature',
-          properties: { color: r.color, opacidad: r.op, id: r.id },
-          geometry: { type: 'Polygon', coordinates: [circuloZona(r.lng, r.lat)] },
-        }))
-        if (feats.length === 0) return
-        map.addSource('reportes-zona', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: feats },
-        } as never)
-        map.addLayer({
-          id: 'reportes-zona-fill',
-          type: 'fill',
-          source: 'reportes-zona',
-          // Time decay: la zona se vuelve "fantasma" con la edad
-          paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['get', 'opacidad'] },
-        })
-        map.addLayer({
-          id: 'reportes-zona-linea',
-          type: 'line',
-          source: 'reportes-zona',
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': ['get', 'color'],
-            'line-width': 2,
-            'line-opacity': ['min', ['+', ['get', 'opacidad'], 0.2], 0.9],
-          },
-        })
-      } catch { /* estilo aún no listo: reintenta en 'load' */ }
-    }
-    try {
-      if (map.isStyleLoaded()) dibujarZonas()
-      else map.once('load', dibujarZonas)
-    } catch { /* noop */ }
-
-    // ── Pines: burbuja de cluster al alejar, pin individual al acercar ──
-    // Rojo encima de amarillo encima de azul (zIndex) + opacidad por edad.
-    const porId = new Map(reportesVisibles.map((r) => [r.id, r]))
-    clusters.forEach((c) => {
-      const [lng, lat] = c.geometry.coordinates
-      // Burbuja de cluster: conteo + zoom al tocar
-      if (c.properties.cluster) {
-        const n = c.properties.point_count ?? 2
-        const tam = n >= 10 ? 46 : 38
-        const el = document.createElement('button')
-        el.type = 'button'
-        el.title = `${n} reportes — toca para acercar`
-        el.setAttribute('aria-label', el.title)
-        el.style.cssText =
-          `width:${tam}px;height:${tam}px;border-radius:9999px;background:rgba(255,255,255,.95);` +
-          'border:3px solid #2563EB;color:#1D4ED8;font-weight:800;font-size:13px;' +
-          'box-shadow:0 4px 16px rgba(37,99,235,.35);cursor:pointer;'
-        el.textContent = String(n)
-        el.addEventListener('click', (ev) => {
-          ev.stopPropagation()
-          try {
-            const z = clusterIdx.getClusterExpansionZoom(c.properties.cluster_id as number)
-            map.easeTo({ center: [lng, lat], zoom: Math.min(z, 18), duration: 500 })
-          } catch { /* noop */ }
-        })
-        markers.push(new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map))
-        return
-      }
-      const r = porId.get(c.properties.id as string)
-      if (!r) return
-      const el = document.createElement('button')
-      el.type = 'button'
-      el.title = `${ETIQUETA_CATEGORIA[r.categoria]} · ${edadCorta(r.creado_en)}`
-      el.setAttribute('aria-label', el.title)
-      el.style.cssText =
-        'width:26px;height:26px;border-radius:9999px 9999px 9999px 0;display:flex;align-items:center;justify-content:center;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer;'
-      el.style.background = r.color
-      el.style.opacity = String(Math.min(1, r.op + 0.2))
-      el.style.zIndex = String(10 + RANK_GRAVEDAD[r.gravedad] * 10)
-      if (r.id === activeReportId) el.style.transform = 'rotate(-45deg) scale(1.35)'
-      const punto = document.createElement('span')
-      punto.style.cssText =
-        'width:8px;height:8px;border-radius:9999px;background:#fff;transform:rotate(45deg);'
-      el.appendChild(punto)
-      const marker = new maplibregl.Marker({ element: el }).setLngLat([r.lng, r.lat])
-      marker.getElement().addEventListener('click', (ev) => {
-        ev.stopPropagation()
-        abrirPopupReporte(r)
-      })
-      marker.addTo(map)
-      markers.push(marker)
-      markerElsRef.current.set(r.id, el)
-    })
-    return () => {
-      markers.forEach((m) => m.remove())
-      try {
-        const mp = mapObj.current
-        if (mp) {
-          for (const id of ['reportes-zona-fill', 'reportes-zona-linea']) {
-            if (mp.getLayer(id)) mp.removeLayer(id)
-          }
-          if (mp.getSource('reportes-zona')) mp.removeSource('reportes-zona')
-        }
-      } catch { /* noop */ }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportesDeps, clusters, tab, clusterIdx, estiloKey])
 
   async function enviarReporte() {
     if (!user) return
@@ -1295,23 +1146,6 @@ export default function Usuario() {
       setRepGuardando(false)
     }
   }
-  // Pines de contactos
-  const pinesDeps = useMemo(() => contactos.map((c) => c.id).join(','), [contactos])
-  useEffect(() => {
-    const map = mapObj.current
-    if (!map) return
-    const markers: maplibregl.Marker[] = []
-    contactos.forEach((c) => {
-      if (c.lat == null || c.lng == null) return
-      const el = document.createElement('div')
-      el.title = c.nombre
-      el.style.cssText =
-        'width:14px;height:14px;border-radius:9999px;background:#10B981;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);'
-      markers.push(new maplibregl.Marker({ element: el }).setLngLat([c.lng, c.lat]).addTo(map))
-    })
-    return () => markers.forEach((m) => m.remove())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinesDeps, estiloKey])
 
   // Polyline de la ruta: azul #2563EB gruesa con glow sutil
   useEffect(() => {
@@ -2184,7 +2018,7 @@ export default function Usuario() {
       style={{ height: '100dvh' }}
     >
       {/* Único header sticky */}
-      <DashboardHeader alertaActiva={alertaActiva} protegido={protegido} />
+      <DashboardHeader alertaActiva={alertaActiva} />
 
       {/* Mapa protagonista: fondo de la pantalla.
           min-h-0 es obligatorio: sin él, el hijo flex con solo hijos
@@ -2261,6 +2095,35 @@ export default function Usuario() {
                     </button>
                     )
                   })}
+                  {/* Explora tu entorno: qué capas se ven y la vista en lista */}
+                  <span className="my-1.5 w-px shrink-0 bg-white/15" aria-hidden />
+                  <button
+                    onClick={() => setVerAyuda((v) => !v)}
+                    aria-pressed={verAyuda}
+                    className={`h-9 shrink-0 flex items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium backdrop-blur-md transition-colors ${
+                      verAyuda ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100' : 'border-white/10 bg-slate-900/80 text-slate-400'
+                    }`}
+                  >
+                    <ShieldCheck size={15} className={verAyuda ? 'text-cyan-300' : 'text-slate-500'} aria-hidden />
+                    Ayuda cercana
+                  </button>
+                  <button
+                    onClick={() => setVerAvisos((v) => !v)}
+                    aria-pressed={verAvisos}
+                    className={`h-9 shrink-0 flex items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium backdrop-blur-md transition-colors ${
+                      verAvisos ? 'border-amber-400/50 bg-amber-500/15 text-amber-100' : 'border-white/10 bg-slate-900/80 text-slate-400'
+                    }`}
+                  >
+                    <MapPin size={15} className={verAvisos ? 'text-amber-300' : 'text-slate-500'} aria-hidden />
+                    Avisos de vecinos
+                  </button>
+                  <button
+                    onClick={() => setShowListaEntorno(true)}
+                    className="h-9 shrink-0 flex items-center gap-1.5 rounded-full border border-white/10 bg-slate-900/80 px-3.5 text-[13px] font-medium text-slate-100 backdrop-blur-md hover:border-blue-400/40 transition-colors"
+                  >
+                    <List size={15} className="text-blue-400" aria-hidden />
+                    Ver como lista
+                  </button>
                 </div>
               )}
 
@@ -2516,6 +2379,24 @@ export default function Usuario() {
                     </div>
                   )}
 
+                  {itemMapa && (
+                    <TarjetaMapa
+                      key={`${itemMapa.tipo}:${itemMapa.id}`}
+                      item={itemMapa}
+                      distanciaM={distanciaItem}
+                      onCerrar={() => setSeleccionMapa(null)}
+                      onComoLlegar={
+                        !rutaActiva && !acomp
+                          ? (l) => {
+                              setSeleccionMapa(null)
+                              previsualizar(l.lat, l.lng, l.nombre)
+                            }
+                          : null
+                      }
+                      onEliminar={(id) => void eliminarReporte(id)}
+                    />
+                  )}
+
                   {/* Tarjeta única: estado en una línea + Ruta (izquierda) y SOS (derecha, pulgar), mismo tamaño */}
                   <div className="pointer-events-auto w-full max-w-[440px] mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
                     {!rutaActiva ? (
@@ -2524,7 +2405,7 @@ export default function Usuario() {
                         {!alertaActiva && !sos.abierta && !acomp && (
                           <p className="mb-3 flex items-center gap-2 px-1 text-[13px] leading-tight">
                             <ShieldCheck size={16} className="shrink-0 text-emerald-400" aria-hidden />
-                            <span className="font-semibold text-white">Estás protegido</span>
+                            <span className="font-semibold text-white">SOS listo</span>
                             <span className="min-w-0 truncate text-slate-400">
                               · {gpsEstado === 'ok' ? 'Ubicación activa' : 'Ubicación aproximada'}
                             </span>
@@ -2637,11 +2518,11 @@ export default function Usuario() {
                       <p className="text-[13px] text-muted dark:text-slate-400 truncate">{user?.email}</p>
                       <span
                         className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                          alertaActiva ? 'bg-[#FEF2F2] text-sos' : 'bg-[#ECFDF5] text-[#059669]'
+                          alertaActiva ? 'bg-[#FEF2F2] text-sos' : 'bg-canvas text-muted dark:bg-slate-800 dark:text-slate-300'
                         }`}
                       >
                         <Crosshair size={12} />
-                        {alertaActiva ? 'Alerta activa' : protegido ? 'Protegido' : 'Inactivo'}
+                        {alertaActiva ? 'Alerta activa' : 'Sin alerta activa'}
                       </span>
                     </div>
                   </section>
@@ -2990,6 +2871,18 @@ export default function Usuario() {
           onAyuda={() => {
             control.estoyBien()
             void activarSOS()
+          }}
+        />
+      )}
+
+      {showListaEntorno && (
+        <ListaEntorno
+          filas={filasEntorno()}
+          onCerrar={() => setShowListaEntorno(false)}
+          onElegir={(clave) => {
+            setShowListaEntorno(false)
+            const [tipo, id] = clave.split(':') as ['aviso' | 'ayuda', string]
+            elegirEnMapa({ tipo, id })
           }}
         />
       )}

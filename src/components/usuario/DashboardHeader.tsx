@@ -3,14 +3,13 @@ import Logo from '../Logo'
 
 interface Props {
   alertaActiva: boolean
-  protegido: boolean
 }
 
 /**
  * Header mínimo: logo, estado y notificaciones. Tema y cerrar sesión viven
  * en la pestaña Perfil para dejar la barra despejada.
  */
-export default function DashboardHeader({ alertaActiva, protegido }: Props) {
+export default function DashboardHeader({ alertaActiva }: Props) {
   return (
     <header
       className={`sticky top-0 z-50 border-b backdrop-blur-md transition-colors duration-300 ${
@@ -23,15 +22,13 @@ export default function DashboardHeader({ alertaActiva, protegido }: Props) {
           <Logo size={30} textoClaro={alertaActiva} />
           <span
             className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-              alertaActiva
-                ? 'bg-white text-sos'
-                : protegido
-                  ? 'bg-[#ECFDF5] text-[#059669] dark:bg-emerald-500/10 dark:text-emerald-300'
-                  : 'bg-canvas text-muted dark:bg-slate-800 dark:text-slate-400'
+              alertaActiva ? 'bg-white text-sos' : 'bg-canvas text-muted dark:bg-slate-800 dark:text-slate-300'
             }`}
           >
-            <span className={`w-1.5 h-1.5 shrink-0 rounded-full animate-pulse ${alertaActiva ? 'bg-sos' : 'bg-ok'}`} aria-hidden />
-            <span className="max-[359px]:sr-only">{alertaActiva ? 'ALERTA' : protegido ? 'Protegido' : 'Inactivo'}</span>
+            {/* Sin alerta no hay nada "en vivo": el punto no late. "SOS listo" dice lo que es verdad
+                (puedes pedir ayuda), no que alguien te esté mirando. */}
+            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${alertaActiva ? 'bg-sos animate-pulse' : 'bg-ok'}`} aria-hidden />
+            <span className="max-[359px]:sr-only">{alertaActiva ? 'ALERTA' : 'SOS listo'}</span>
           </span>
         </div>
         <button
