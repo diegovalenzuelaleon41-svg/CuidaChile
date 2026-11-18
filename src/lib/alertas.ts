@@ -25,6 +25,9 @@ export interface AlertaSOS {
   actualizado_en: string
   /** Solo 'descartada': por qué la descartó el operador (bitácora). */
   motivo_cierre: string | null
+  /** Cancelada con el PIN de coacción: sigue abierta para la central (el ciudadano no la ve). */
+  coaccion?: boolean
+  coaccion_en?: string | null
 }
 
 export const ESTADOS_SOS_ABIERTOS: EstadoAlerta[] = ['activa', 'en_atencion']

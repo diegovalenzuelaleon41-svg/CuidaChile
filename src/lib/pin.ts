@@ -15,6 +15,8 @@ export interface VerificacionPin {
   resultado: 'ok' | 'incorrecto' | 'bloqueado' | 'sin_pin' | 'cancelada' | 'ya_cerrada'
   intentos_restantes?: number
   bloqueado_hasta?: string
+  /** cancelar_sos con el PIN de coacción: el teléfono sigue mandando su ubicación sin mostrar nada. */
+  seguir?: boolean
 }
 
 /** Mensaje para un PIN rechazado (incorrecto o bloqueado), o null si no hubo rechazo. */
@@ -97,4 +99,35 @@ export function tomarMarcaRestablecerPin(): boolean {
   } catch {
     return false
   }
+}
+
+/* ── PIN de coacción (20261118000000_coaccion_seguimiento_calificacion.sql) ── */
+
+/** null = no se pudo consultar. */
+export async function consultarTienePinCoaccion(): Promise<boolean | null> {
+  const { data, error } = await supabase.rpc('tiene_pin_coaccion')
+  if (error) {
+    console.error('[pin] no se pudo consultar el de coacción:', error.code, error.message)
+    return null
+  }
+  return data === true
+}
+
+/** Crea o cambia el PIN de coacción (exige el PIN real). */
+export async function establecerPinCoaccion(pin: string, coaccion: string): Promise<VerificacionPin | string> {
+  const { data, error } = await supabase.rpc('establecer_pin_coaccion', { p_pin: pin, p_coaccion: coaccion })
+  if (error) {
+    console.error('[pin] no se pudo guardar el de coacción:', error.code, error.message)
+    return error.message || 'No se pudo guardar el PIN de coacción.'
+  }
+  return data as VerificacionPin
+}
+
+export async function quitarPinCoaccion(pin: string): Promise<VerificacionPin | string> {
+  const { data, error } = await supabase.rpc('quitar_pin_coaccion', { p_pin: pin })
+  if (error) {
+    console.error('[pin] no se pudo quitar el de coacción:', error.code, error.message)
+    return error.message || 'No se pudo quitar el PIN de coacción.'
+  }
+  return data as VerificacionPin
 }

@@ -234,10 +234,14 @@ function sosAAlerta(a: AlertaSOS): Alerta {
   const timeline = [`${horaDe(a.creada_en)} - Alerta SOS recibida`]
   if (a.lat == null || a.lng == null) timeline.push(`${horaDe(a.creada_en)} - Sin ubicación GPS del ciudadano`)
   if (a.atendida_en) timeline.push(`${horaDe(a.atendida_en)} - Atendiste la alerta`)
+  if (a.coaccion && a.coaccion_en) {
+    timeline.push(`${horaDe(a.coaccion_en)} - El ciudadano canceló con su PIN de coacción: está bajo presión`)
+  }
   if (a.estado === 'resuelta' && a.cerrada_en) timeline.push(`${horaDe(a.cerrada_en)} - Alerta marcada como resuelta`)
   return {
     id: a.id,
     tipo: 'SOS',
+    coaccion: a.coaccion ?? false,
     nombre: a.usuario_nombre ?? 'Usuario CuidaChile',
     telefono: a.usuario_telefono ?? '',
     hora: horaDe(a.creada_en),
@@ -825,6 +829,18 @@ export default function OperadorDashboard() {
 
                 {sel.barrial && <DetalleGrupoBarrial barrial={sel.barrial} />}
 
+                {sel.coaccion && (
+                  <div role="alert" className="mt-3 rounded-xl border border-red-500/60 bg-red-500/15 p-3 text-sm leading-snug text-red-100">
+                    <p className="flex items-center gap-1.5 font-bold text-red-200">
+                      <ShieldAlert size={15} /> Cancelada bajo coacción
+                    </p>
+                    <p className="mt-1">
+                      Usó su PIN de coacción: alguien lo obligó a cancelar. En su teléfono la alerta aparece cancelada, pero su
+                      ubicación sigue llegando. No lo llames ni le escribas por la app: podrías delatarlo. Coordina con el 133.
+                    </p>
+                  </div>
+                )}
+
                 {sel.ruta && (
                   <p className="mt-3 flex items-start gap-2.5 text-sm leading-snug text-slate-300">
                     <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full border-2 border-slate-400" aria-hidden />
@@ -1348,6 +1364,11 @@ function AlertaCard({
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${estadoClases(alerta.estado)}`}>
               {estadoTexto(alerta.estado)}
             </span>
+            {alerta.coaccion && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-500/60 bg-red-500/20 text-red-200 animate-pulse">
+                <ShieldAlert size={11} /> Coacción
+              </span>
+            )}
             {alerta.escalada && (
               <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-500/50 bg-purple-500/15 text-purple-300">
                 <ShieldAlert size={11} /> Escalada

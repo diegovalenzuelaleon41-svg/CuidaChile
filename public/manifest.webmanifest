@@ -1,0 +1,46 @@
+{
+  "name": "CuidaChile",
+  "short_name": "CuidaChile",
+  "description": "Tu vuelta a casa, siempre acompañada: ruta acompañada y botón SOS con una central.",
+  "lang": "es-CL",
+  "start_url": "/usuario",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050B14",
+  "theme_color": "#050B14",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Enviar SOS",
+      "short_name": "SOS",
+      "description": "Abre CuidaChile y envía una alerta SOS tras 5 segundos para cancelar",
+      "url": "/usuario?sos=1",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

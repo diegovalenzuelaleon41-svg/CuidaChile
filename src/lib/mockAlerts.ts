@@ -31,6 +31,8 @@ export interface Alerta {
   ruta?: string
   /** Acompañamiento real aún sin GPS: lat/lng son un valor por defecto y no se dibuja pin. */
   sinUbicacion?: boolean
+  /** SOS cancelado con el PIN de coacción: el ciudadano está bajo presión. */
+  coaccion?: boolean
   /** Acompañamiento sin GPS en vivo todavía: lat/lng son el punto de partida de su ruta. */
   soloOrigen?: boolean
   /** Última actualización (ISO) — acompañamientos reales. */

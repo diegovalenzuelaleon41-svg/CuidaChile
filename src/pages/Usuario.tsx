@@ -8,9 +8,22 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
   Briefcase, CheckCircle2, ChevronRight, Clock3, Crosshair, Home, KeyRound, LocateFixed, MapPin, MapPinned,
-  MessageCircle, Minus, Moon, Navigation, Plus, Search, ShieldCheck, Star, Sun, Volume2, X,
+  Copy, EyeOff, MessageCircle, Minus, Moon, Navigation, Plus, Search, Share2, ShieldCheck, Star, Sun, Vibrate, Volume2, VolumeX, X, Zap,
 } from 'lucide-react'
-import { callar, guardarPreferenciaVoz, hablar, leerPreferenciaVoz, vozDisponible } from '../lib/voz'
+import {
+  callar,
+  guardarModoDiscreto,
+  guardarPreferenciaVoz,
+  hablar,
+  leerModoDiscreto,
+  leerPreferenciaVoz,
+  vozDisponible,
+} from '../lib/voz'
+import { useControlBienestar } from '../hooks/useControlBienestar'
+import { ModalCalificar, ModalTodoBien } from '../components/usuario/ModalesRuta'
+import AvisarContactos from '../components/usuario/AvisarContactos'
+import CuentaRegresivaSOS from '../components/usuario/CuentaRegresivaSOS'
+import { agitarDisponible, guardarAgitarSOS, leerAgitarSOS, pedirPermisoMovimiento, useAgitar } from '../hooks/useAgitar'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../hooks/useTheme'
 import { supabase } from '../lib/supabase'
@@ -45,8 +58,8 @@ import {
 } from '../lib/reportes'
 import PantallaSOS, { type EstadoPantallaSOS } from '../components/usuario/PantallaSOS'
 import { useLinterna, useSirena } from '../hooks/useAutoproteccion'
-import { ModalCrearPin, ModalPinPerfil } from '../components/usuario/PinSeguridad'
-import { consultarTienePin, tomarMarcaRestablecerPin } from '../lib/pin'
+import { ModalCrearPin, ModalPinCoaccion, ModalPinPerfil } from '../components/usuario/PinSeguridad'
+import { consultarTienePin, consultarTienePinCoaccion, tomarMarcaRestablecerPin } from '../lib/pin'
 
 // Reporte comunitario: pin visible 6 h; a las 2 h se atenúa a amarillo.
 // La comunidad ve los validados (reportes_publicos, sin autor); el autor
@@ -197,7 +210,7 @@ export default function Usuario() {
 
   const [nombre, setNombre] = useState<string>(user?.email ?? 'Usuario')
   // ?tab=perfil permite abrir una pestaña directo (p. ej. desde el menú del header).
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TabId>(() => (searchParams.get('tab') === 'perfil' ? 'perfil' : 'inicio'))
   const [pos, setPos] = useState<[number, number]>(SANTIAGO)
   const [mapEstado, setMapEstado] = useState<MapEstado>('cargando')
@@ -224,6 +237,8 @@ export default function Usuario() {
   const [formC, setFormC] = useState<FormContacto>({ nombre: '', telefono: '', relacion: 'familia' })
   // Reportes comunitarios
   const [reportes, setReportes] = useState<Reporte[]>([])
+  // Las rutas eligen la alternativa que pasa cerca de menos reportes (rutaOSRM).
+  const puntosReportes = () => reportesRef.current.map((r): [number, number] => [r.lng, r.lat])
   const [showReporte, setShowReporte] = useState(false)
   // Para el canal Realtime (que no se re-suscribe en cada carga).
   const reportesRef = useRef<Reporte[]>([])
@@ -246,7 +261,7 @@ export default function Usuario() {
   const [aviso, setAviso] = useState<string | null>(null)
   // Destino elegido con pin central (prevista antes de confirmar)
   const [preview, setPreview] = useState<{ lat: number; lng: number; etiqueta: string } | null>(null)
-  const [previewInfo, setPreviewInfo] = useState<{ distanciaM: number; duracionS: number } | null>(null)
+  const [previewInfo, setPreviewInfo] = useState<{ distanciaM: number; duracionS: number; reportesEvitados: number } | null>(null)
   const [previewLinea, setPreviewLinea] = useState<[number, number][] | null>(null)
   const [previewCargando, setPreviewCargando] = useState(false)
   // ── Modo "pin central": arrastrar para seleccionar destino ──
@@ -293,10 +308,29 @@ export default function Usuario() {
   const sos = useSOS(user?.id, () => gpsRealRef.current)
   // Avisos hablados del SOS: opcionales y apagados por defecto (src/lib/voz.ts).
   const [vozSOS, setVozSOS] = useState(leerPreferenciaVoz)
-  const vozSOSRef = useRef(vozSOS)
+  // Modo discreto: sin voz, sin vibración, sin sirena ni rojo en la pantalla SOS.
+  const [discreto, setDiscreto] = useState(leerModoDiscreto)
+  const vozSOSRef = useRef(vozSOS && !discreto)
   useEffect(() => {
-    vozSOSRef.current = vozSOS
-  }, [vozSOS])
+    vozSOSRef.current = vozSOS && !discreto
+  }, [vozSOS, discreto])
+  // SOS sin el botón: /usuario?sos=1 (atajo del ícono, Atajos de iPhone, Siri) o agitar el teléfono.
+  // Siempre pasa por una cuenta regresiva cancelable.
+  const [cuentaSOS, setCuentaSOS] = useState<'atajo' | 'agitar' | null>(() =>
+    searchParams.get('sos') === '1' ? 'atajo' : null,
+  )
+  const [agitarSOS, setAgitarSOS] = useState(leerAgitarSOS)
+  // Se saca ?sos=1 de la URL: recargar no debe volver a disparar la cuenta.
+  useEffect(() => {
+    if (!searchParams.has('sos')) return
+    setSearchParams(
+      (prev) => {
+        prev.delete('sos')
+        return prev
+      },
+      { replace: true },
+    )
+  }, [searchParams, setSearchParams])
   // Llamada de voz con la central (LiveKit), ligada al SOS abierto.
   const { sesion: sesionLlamada } = useSesionLlamada(sos.alerta?.id ?? null)
   const voz = useLlamadaVoz(sesionLlamada)
@@ -323,6 +357,12 @@ export default function Usuario() {
   const [pinPerfil, setPinPerfil] = useState<'cambiar' | 'restablecer' | null>(() =>
     tomarMarcaRestablecerPin() ? 'restablecer' : null,
   )
+  // PIN de coacción: null = consultando.
+  const [tieneCoaccion, setTieneCoaccion] = useState<boolean | null>(null)
+  const [showCoaccion, setShowCoaccion] = useState(false)
+  // Ruta recién terminada con operador: se pide una nota.
+  const [calificar, setCalificar] = useState<string | null>(null)
+  const [showCompartirRuta, setShowCompartirRuta] = useState(false)
   // Chat real con el operador de la central (tabla mensajes + Realtime).
   const chat = useChatAcompanamiento(acomp?.id ?? null, 'usuario')
   // Mensajes del operador ya vistos (se marca al abrir/cerrar el chat).
@@ -362,6 +402,9 @@ export default function Usuario() {
     let vivo = true
     void consultarTienePin().then((tiene) => {
       if (vivo) setTienePin(tiene)
+    })
+    void consultarTienePinCoaccion().then((tiene) => {
+      if (vivo) setTieneCoaccion(tiene)
     })
     return () => { vivo = false }
   }, [userId])
@@ -1285,18 +1328,38 @@ export default function Usuario() {
   async function activarSOS() {
     // SIN confirmación — spec §6.3 / §9
     setShowSosModal(true)
-    setSosError(false)
     // Ya hay una abierta: solo volver a mostrar su estado.
-    if (sos.abierta) return
+    if (sos.abierta) {
+      setSosError(false)
+      return
+    }
+    // Un reintento automático no vuelve a decir "Enviando alerta".
+    const reintento = sosError
     // Se dice algo ya, dentro del toque: iOS solo deja hablar si la voz arranca con un gesto.
-    if (vozSOSRef.current) hablar('Enviando alerta.')
+    if (vozSOSRef.current && !reintento) hablar('Enviando alerta.')
     const error = await sos.activar()
-    if (error) setSosError(true)
-    if (!vozSOSRef.current) return
+    setSosError(!!error)
+    if (!vozSOSRef.current || (error && reintento)) return
     if (error) hablar('No pudimos enviar tu alerta. Vuelve a intentarlo.')
     else if (gpsRealRef.current) hablar('Alerta enviada. La central ya ve dónde estás.')
     else hablar('Alerta enviada a la central. Todavía no tenemos tu ubicación.')
   }
+
+  // SOS que no llegó (sin señal): se reintenta solo cada 5 s y apenas vuelve la conexión.
+  const activarSOSRef = useRef(activarSOS)
+  useEffect(() => {
+    activarSOSRef.current = activarSOS
+  })
+  useEffect(() => {
+    if (!sosError || !showSosModal) return
+    const reintentar = () => void activarSOSRef.current()
+    const t = window.setInterval(reintentar, 5000)
+    window.addEventListener('online', reintentar)
+    return () => {
+      window.clearInterval(t)
+      window.removeEventListener('online', reintentar)
+    }
+  }, [sosError, showSosModal])
 
   /** Devuelve el error para mostrarlo en el modal del PIN (la alerta sigue activa). */
   async function cancelarSOS(pin: string): Promise<string | null> {
@@ -1325,6 +1388,8 @@ export default function Usuario() {
     if (!sos.alerta || !sos.abierta || sosMostradoRef.current === sos.alerta.id) return
     sosMostradoRef.current = sos.alerta.id
     setShowSosModal(true)
+    // Ya había un SOS abierto: la cuenta regresiva sobra.
+    setCuentaSOS(null)
   }, [sos.alerta, sos.abierta])
 
   // Un operador tomó la alerta: decirlo una vez por alerta.
@@ -1362,11 +1427,13 @@ export default function Usuario() {
     llamadaAvisadaRef.current = sesionLlamada.id
     setShowSosModal(true)
     try {
-      navigator.vibrate?.([300, 150, 300, 150, 300])
+      if (!leerModoDiscreto()) navigator.vibrate?.([300, 150, 300, 150, 300])
     } catch {
       /* sin vibración */
     }
   }, [sesionLlamada, voz.fase])
+
+  useAgitar(agitarSOS && !showSosModal && !cuentaSOS && !sos.abierta, () => setCuentaSOS('agitar'))
 
   const estadoPantallaSos: EstadoPantallaSOS = sosError
     ? 'error'
@@ -1375,6 +1442,26 @@ export default function Usuario() {
       : sos.alerta.estado === 'en_atencion'
         ? 'en_atencion'
         : 'activa'
+
+  // "¿Todo bien?": durante una ruta con operador, si la persona queda quieta o se demora mucho.
+  const control = useControlBienestar({
+    activo: acomp?.estado === 'EN_CURSO' && !!rutaActiva && !sos.abierta,
+    obtenerPos: () => gpsRealRef.current,
+    inicioEpoch: rutaActiva?.inicioEpoch ?? null,
+    duracionS: infoRuta?.duracionS ?? null,
+    onSinRespuesta: () => {
+      if (vozSOSRef.current) hablar('No respondiste. Enviamos una alerta a la central.')
+      void activarSOSRef.current()
+    },
+  })
+  useEffect(() => {
+    if (!control.motivo || leerModoDiscreto()) return
+    try {
+      navigator.vibrate?.([200, 100, 200])
+    } catch {
+      /* sin vibración */
+    }
+  }, [control.motivo])
 
   // ── Pin central: entrar / salir / confirmar ──────────────────────────
   // El mapa es 100% explorable (click, drag, zoom no eligen nada).
@@ -1420,7 +1507,7 @@ export default function Usuario() {
       try {
         const [dir, ruta] = await Promise.all([
           direccionDesdeCoords(lat, lng).catch(() => null),
-          obtenerRutaCalles([p[0], p[1]], [lng, lat]),
+          obtenerRutaCalles([p[0], p[1]], [lng, lat], undefined, puntosReportes()),
         ])
         setPreview({
           lat,
@@ -1428,7 +1515,7 @@ export default function Usuario() {
           etiqueta: dir ?? `Punto del mapa · ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
         })
         if (ruta) {
-          setPreviewInfo({ distanciaM: ruta.distanciaM, duracionS: ruta.duracionS })
+          setPreviewInfo({ distanciaM: ruta.distanciaM, duracionS: ruta.duracionS, reportesEvitados: ruta.reportesEvitados })
           setPreviewLinea(ruta.coords)
         } else {
           setPreviewLinea([[p[0], p[1]], [lng, lat]])
@@ -1693,7 +1780,7 @@ export default function Usuario() {
     if (r.destinoLat != null && r.destinoLng != null && r.origenLat != null && r.origenLng != null) {
       const o: [number, number] = [r.origenLng, r.origenLat]
       const d: [number, number] = [r.destinoLng, r.destinoLat]
-      obtenerRutaCalles(o, d).then((ruta) => {
+      obtenerRutaCalles(o, d, undefined, puntosReportes()).then((ruta) => {
         if (ruta) {
           setLineaRuta(ruta.coords)
           setInfoRuta({ distanciaM: ruta.distanciaM, duracionS: ruta.duracionS })
@@ -1730,6 +1817,7 @@ export default function Usuario() {
     limpiarAcomp()
     rutaPendienteRef.current = null
     const enRuta = !!useSeguridad.getState().rutaActiva
+    if (acomp.estado === 'FINALIZADO' && acomp.operador_id) setCalificar(acomp.id)
     if (acomp.estado === 'FINALIZADO' && enRuta) {
       void cerrarRuta('Tu operador finalizó el acompañamiento. ¡Llegaste bien!')
     } else if (acomp.estado === 'DESCARTADA') {
@@ -1782,6 +1870,7 @@ export default function Usuario() {
 
   async function terminarRuta() {
     if (!rutaActiva || !user) return
+    if (acomp?.estado === 'EN_CURSO' && acomp.operador_id) setCalificar(acomp.id)
     void finalizarAcomp()
     await cerrarRuta('Ruta finalizada. ¡Bien hecho!')
   }
@@ -2152,6 +2241,12 @@ export default function Usuario() {
                           {Math.max(1, Math.round(previewInfo.duracionS / 60))} min en auto
                         </p>
                       )}
+                      {previewInfo && previewInfo.reportesEvitados > 0 && (
+                        <p className="mt-0.5 text-[12px] font-medium text-emerald-300">
+                          Ruta elegida para evitar {previewInfo.reportesEvitados}{' '}
+                          {previewInfo.reportesEvitados === 1 ? 'reporte' : 'reportes'} de la comunidad
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={limpiarPreview}
@@ -2392,6 +2487,14 @@ export default function Usuario() {
                             )}
                           </button>
                           <button
+                            onClick={() => setShowCompartirRuta(true)}
+                            aria-label="Compartir tu trayecto con tus contactos"
+                            title="Compartir trayecto"
+                            className="h-12 w-12 shrink-0 rounded-xl border border-white/15 text-slate-200 hover:bg-white/10 transition-colors flex items-center justify-center"
+                          >
+                            <Share2 size={18} />
+                          </button>
+                          <button
                             onClick={terminarRuta}
                             className="flex-[3] min-w-0 h-12 rounded-xl border border-white/15 px-2 text-[14px] font-semibold text-slate-200 hover:bg-white/10 transition-colors"
                           >
@@ -2497,6 +2600,132 @@ export default function Usuario() {
                       </span>
                     </button>
                   )}
+                  {tienePin && tieneCoaccion != null && (
+                    <button
+                      onClick={() => setShowCoaccion(true)}
+                      className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                        <EyeOff size={19} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[14px] font-semibold text-heading dark:text-white">PIN de coacción</span>
+                        <span className="block text-[12px] text-muted dark:text-slate-400">
+                          {tieneCoaccion
+                            ? 'Activo. Cancela en apariencia y avisa en silencio'
+                            : 'Por si alguien te obliga a cancelar una alerta'}
+                        </span>
+                      </span>
+                      <ChevronRight size={18} className="text-faint dark:text-slate-500 shrink-0" />
+                    </button>
+                  )}
+                  {agitarDisponible() && (
+                    <button
+                      onClick={async () => {
+                        const activo = !agitarSOS
+                        if (activo && !(await pedirPermisoMovimiento())) {
+                          setAviso('Sin permiso del sensor de movimiento.')
+                          return
+                        }
+                        setAgitarSOS(activo)
+                        guardarAgitarSOS(activo)
+                      }}
+                      aria-pressed={agitarSOS}
+                      className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                        <Vibrate size={19} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[14px] font-semibold text-heading dark:text-white">Agitar para SOS</span>
+                        <span className="block text-[12px] text-muted dark:text-slate-400">
+                          {agitarSOS
+                            ? 'Agita fuerte el teléfono con la app abierta: tienes 5 s para cancelar'
+                            : 'Desactivado. Funciona solo con la app abierta'}
+                        </span>
+                      </span>
+                      <span
+                        className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${agitarSOS ? 'bg-brand-600' : 'bg-line dark:bg-slate-700'}`}
+                        aria-hidden
+                      >
+                        <span
+                          className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${agitarSOS ? 'left-[22px]' : 'left-0.5'}`}
+                        />
+                      </span>
+                    </button>
+                  )}
+                  <div className="card w-full p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                        <Zap size={19} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[14px] font-semibold text-heading dark:text-white">Acceso rápido al SOS</span>
+                        <span className="block text-[12px] text-muted dark:text-slate-400">
+                          Un link que abre la app y envía el SOS tras 5 s para cancelar
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const link = `${window.location.origin}/usuario?sos=1`
+                          try {
+                            await navigator.clipboard.writeText(link)
+                            setAviso('Link de SOS copiado.')
+                          } catch {
+                            setAviso(`Copia este link: ${link}`)
+                          }
+                        }}
+                        aria-label="Copiar link de SOS"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-brand-600 dark:text-[#93C5FD] hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <Copy size={18} />
+                      </button>
+                    </div>
+                    <details className="mt-3 text-[12px] leading-relaxed text-muted dark:text-slate-400">
+                      <summary className="cursor-pointer font-semibold text-brand-600 dark:text-[#93C5FD]">Cómo configurarlo</summary>
+                      <ul className="mt-2 list-disc space-y-1.5 pl-4">
+                        <li>
+                          <b>Android:</b> instala la app en tu pantalla de inicio, mantén presionado su ícono y elige “Enviar SOS”.
+                        </li>
+                        <li>
+                          <b>iPhone:</b> en la app Atajos crea un atajo con la acción “Abrir URL” y pega el link. Después
+                          asígnalo a Toque atrás (Ajustes → Accesibilidad → Tocar), al Botón de Acción, o díselo a Siri.
+                        </li>
+                        <li>El link se abre en el navegador: deja tu sesión iniciada ahí.</li>
+                      </ul>
+                    </details>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const activo = !discreto
+                      setDiscreto(activo)
+                      guardarModoDiscreto(activo)
+                      if (activo) callar()
+                    }}
+                    aria-pressed={discreto}
+                    className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                      <VolumeX size={19} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[14px] font-semibold text-heading dark:text-white">Modo discreto</span>
+                      <span className="block text-[12px] text-muted dark:text-slate-400">
+                        {discreto
+                          ? 'Sin voz, sin vibración y sin sirena: la pantalla SOS no llama la atención'
+                          : 'Para pedir ayuda sin que nadie lo note'}
+                      </span>
+                    </span>
+                    <span
+                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${discreto ? 'bg-brand-600' : 'bg-line dark:bg-slate-700'}`}
+                      aria-hidden
+                    >
+                      <span
+                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${discreto ? 'left-[22px]' : 'left-0.5'}`}
+                      />
+                    </span>
+                  </button>
                   <button
                     onClick={() => setPinPerfil('cambiar')}
                     className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
@@ -2613,6 +2842,68 @@ export default function Usuario() {
             setSosError(false)
           }}
           onCancelar={cancelarSOS}
+          alertaId={sos.abierta ? sos.alerta?.id ?? null : null}
+          contactos={contactos}
+          discreto={discreto}
+        />
+      )}
+
+      {control.motivo && !showSosModal && (
+        <ModalTodoBien
+          motivo={control.motivo}
+          segundos={control.segundos}
+          onBien={control.estoyBien}
+          onAyuda={() => {
+            control.estoyBien()
+            void activarSOS()
+          }}
+        />
+      )}
+
+      {calificar && (
+        <ModalCalificar
+          acompanamientoId={calificar}
+          operador={null}
+          onCerrar={(gracias) => {
+            setCalificar(null)
+            if (gracias) setAviso('Gracias por tu nota.')
+          }}
+        />
+      )}
+
+      {showCompartirRuta && acomp && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Compartir tu trayecto"
+          className="fixed inset-0 z-[55] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCompartirRuta(false)
+          }}
+        >
+          <div className="relative w-full max-w-md">
+            <button
+              type="button"
+              onClick={() => setShowCompartirRuta(false)}
+              aria-label="Cerrar"
+              className="absolute right-3 top-9 z-10 flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+            <AvisarContactos tipo="ruta" objetivo={{ acompanamientoId: acomp.id }} contactos={contactos} />
+          </div>
+        </div>
+      )}
+
+      {showCoaccion && tieneCoaccion != null && (
+        <ModalPinCoaccion
+          tiene={tieneCoaccion}
+          onCerrar={() => setShowCoaccion(false)}
+          onListo={(mensaje, tiene) => {
+            setShowCoaccion(false)
+            setTieneCoaccion(tiene)
+            setAviso(mensaje)
+          }}
         />
       )}
 
@@ -2629,6 +2920,18 @@ export default function Usuario() {
           otroEscribiendo={chatSOS.otroEscribiendo}
           onEscribiendo={chatSOS.avisarEscribiendo}
           sobreSOS
+        />
+      )}
+
+      {cuentaSOS && !sos.abierta && (
+        <CuentaRegresivaSOS
+          origen={cuentaSOS}
+          discreto={discreto}
+          onEnviar={() => {
+            setCuentaSOS(null)
+            void activarSOS()
+          }}
+          onCancelar={() => setCuentaSOS(null)}
         />
       )}
 

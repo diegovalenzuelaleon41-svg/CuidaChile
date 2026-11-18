@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { KeyRound, Loader2, Lock, ShieldAlert, X } from 'lucide-react'
+import { EyeOff, KeyRound, Loader2, Lock, ShieldAlert, X } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
@@ -7,6 +7,8 @@ import {
   cambiarPin,
   crearPin,
   esPinValido,
+  establecerPinCoaccion,
+  quitarPinCoaccion,
   marcarRestablecerPin,
   mensajeRechazoPin,
   restablecerPin,
@@ -533,3 +535,122 @@ export function ModalPinPerfil({
     </ModalPin>
   )
 }
+
+/* ──────────────── 4. PIN de coacción ──────────────── */
+
+/**
+ * Un segundo PIN para cuando alguien te obliga a cancelar la alerta: el teléfono la muestra
+ * cancelada, pero la central la sigue viendo abierta, marcada como coacción, con tu ubicación.
+ * Crear, cambiar o quitar exige el PIN real.
+ */
+export function ModalPinCoaccion({
+  tiene,
+  onCerrar,
+  onListo,
+}: {
+  tiene: boolean
+  onCerrar: () => void
+  onListo: (mensaje: string, tiene: boolean) => void
+}) {
+  const [pin, setPin] = useState('')
+  const [coaccion, setCoaccion] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const coaccionRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (esPinValido(pin) && !coaccion) coaccionRef.current?.querySelector('input')?.focus()
+  }, [pin, coaccion])
+
+  async function resolver(res: VerificacionPinOError, mensaje: string, queda: boolean) {
+    if (typeof res === 'string') {
+      setError(res)
+      return
+    }
+    const rechazo = mensajeRechazoPin(res, 'perfil')
+    if (rechazo) {
+      setError(rechazo.replace('El PIN actual', 'Tu PIN'))
+      setPin('')
+      return
+    }
+    onListo(mensaje, queda)
+  }
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault()
+    if (!esPinValido(pin) || !esPinValido(coaccion) || enviando) return
+    if (pin === coaccion) {
+      setError('El PIN de coacción tiene que ser distinto de tu PIN.')
+      return
+    }
+    setEnviando(true)
+    const res = await establecerPinCoaccion(pin, coaccion)
+    setEnviando(false)
+    await resolver(res, tiene ? 'PIN de coacción actualizado.' : 'PIN de coacción creado.', true)
+  }
+
+  async function quitar() {
+    if (!esPinValido(pin) || enviando) return
+    setEnviando(true)
+    const res = await quitarPinCoaccion(pin)
+    setEnviando(false)
+    await resolver(res, 'PIN de coacción eliminado.', false)
+  }
+
+  return (
+    <ModalPin
+      icono={<EyeOff size={28} />}
+      titulo="PIN de coacción"
+      descripcion="Si alguien te obliga a cancelar una alerta, usa este PIN en vez del tuyo. Tu pantalla mostrará la alerta cancelada, pero la central la seguirá viendo abierta, con tu ubicación, y sabrá que estás bajo presión."
+      onCerrar={onCerrar}
+    >
+      <form onSubmit={guardar} className="mt-6">
+        <p className="mb-2 text-[13px] font-semibold text-slate-300">Tu PIN de seguridad</p>
+        <CampoPin
+          id="pin-real-coaccion"
+          etiqueta="Tu PIN de seguridad"
+          valor={pin}
+          onCambio={(v) => {
+            setPin(v)
+            if (v) setError(null)
+          }}
+          autoFocus
+          invalido={!!error && !pin}
+          deshabilitado={enviando}
+        />
+        <p className="mb-2 mt-5 text-[13px] font-semibold text-slate-300">
+          {tiene ? 'Nuevo PIN de coacción' : 'PIN de coacción'}
+        </p>
+        <div ref={coaccionRef}>
+          <CampoPin
+            id="pin-coaccion"
+            etiqueta="PIN de coacción"
+            valor={coaccion}
+            onCambio={(v) => {
+              setCoaccion(v)
+              if (v) setError(null)
+            }}
+            deshabilitado={enviando}
+          />
+        </div>
+        {error && <MensajeError>{error}</MensajeError>}
+        <button type="submit" disabled={enviando || !esPinValido(pin) || !esPinValido(coaccion)} className={`${BTN_PRIMARIO} mt-6`}>
+          {enviando && <Loader2 size={20} className="animate-spin" />}
+          {enviando ? 'Guardando…' : 'Guardar PIN de coacción'}
+        </button>
+        {tiene && (
+          <button
+            type="button"
+            onClick={() => void quitar()}
+            disabled={enviando || !esPinValido(pin)}
+            className="mt-3 h-11 w-full text-[14px] font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-50"
+          >
+            Quitar el PIN de coacción
+          </button>
+        )}
+      </form>
+    </ModalPin>
+  )
+}
+
+type VerificacionPinOError = Awaited<ReturnType<typeof establecerPinCoaccion>>

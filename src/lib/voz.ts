@@ -50,3 +50,23 @@ export function hablar(texto: string) {
 export function callar() {
   if (vozDisponible()) window.speechSynthesis.cancel()
 }
+
+/* ── Modo discreto: sin voz, sin vibración, sin sirena ni rojo en la pantalla SOS ── */
+
+const CLAVE_DISCRETO = 'cuidachile.discreto'
+
+export function leerModoDiscreto(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_DISCRETO) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function guardarModoDiscreto(activo: boolean) {
+  try {
+    localStorage.setItem(CLAVE_DISCRETO, activo ? '1' : '0')
+  } catch {
+    /* sin almacenamiento: vale solo para esta sesión */
+  }
+}

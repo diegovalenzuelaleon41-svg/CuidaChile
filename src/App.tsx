@@ -11,6 +11,8 @@ import AuthCallback from './pages/AuthCallback'
 import Usuario from './pages/Usuario'
 import OperadorDashboard from './pages/OperadorDashboard'
 import OperadorPendiente from './pages/OperadorPendiente'
+import Seguimiento from './pages/Seguimiento'
+import Privacidad from './pages/Privacidad'
 
 function App() {
   return (
@@ -23,6 +25,8 @@ function App() {
           <Route path="/registro" element={<Registro />} />
           {/* Alias legacy */}
           <Route path="/registrarse" element={<Navigate to="/registro" replace />} />
+          <Route path="/seguir/:token" element={<Seguimiento />} />
+          <Route path="/privacidad" element={<Privacidad />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/seleccionar-rol"element={<Protected><SeleccionarRol /></Protected>} />
           <Route

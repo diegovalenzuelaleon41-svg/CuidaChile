@@ -11,10 +11,33 @@ import { mensajeRechazoPin, type VerificacionPin } from '../lib/pin'
  *  · Realtime sobre su propia fila: detecta cuando un operador la atiende,
  *    la resuelve o la descarta.
  *  · Mientras está abierta envía lat/lng cada 3 s.
+ *  · Cancelada con el PIN de coacción, la pantalla vuelve a la normalidad
+ *    pero el teléfono sigue enviando su ubicación en silencio
+ *    (ubicacion_silenciosa) hasta que la central cierra la alerta.
  *
  * obtenerPos devuelve [lng, lat] del GPS real, o null si no hay fix
  * (nunca se envían coordenadas por defecto).
  */
+/** Alerta de coacción en curso: sobrevive a una recarga. Nombre neutro a propósito. */
+const CLAVE_SILENCIOSA = 'cuidachile.sync'
+
+function leerSilenciosa(): string | null {
+  try {
+    return localStorage.getItem(CLAVE_SILENCIOSA)
+  } catch {
+    return null
+  }
+}
+
+function guardarSilenciosa(id: string | null) {
+  try {
+    if (id) localStorage.setItem(CLAVE_SILENCIOSA, id)
+    else localStorage.removeItem(CLAVE_SILENCIOSA)
+  } catch {
+    /* sin almacenamiento: sigue mientras la página esté abierta */
+  }
+}
+
 export function useSOS(usuarioId: string | undefined, obtenerPos: () => [number, number] | null) {
   const [alerta, setAlerta] = useState<AlertaSOS | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -23,6 +46,7 @@ export function useSOS(usuarioId: string | undefined, obtenerPos: () => [number,
     obtenerPosRef.current = obtenerPos
   })
 
+  const [silenciosa, setSilenciosa] = useState<string | null>(leerSilenciosa)
   const id = alerta?.id
   const abierta = !!alerta && ESTADOS_SOS_ABIERTOS.includes(alerta.estado)
 
@@ -109,6 +133,33 @@ export function useSOS(usuarioId: string | undefined, obtenerPos: () => [number,
     return () => clearInterval(t)
   }, [id, abierta])
 
+  // ── Coacción: ubicación en silencio hasta que la central cierre la alerta ──
+  useEffect(() => {
+    if (!silenciosa) return
+    let detenido = false
+    async function enviar() {
+      const p = obtenerPosRef.current()
+      if (!p || detenido) return
+      const { data, error } = await supabase.rpc('ubicacion_silenciosa', {
+        p_alerta_id: silenciosa,
+        p_lat: p[1],
+        p_lng: p[0],
+      })
+      // false = la central ya la cerró (o no existe): se deja de enviar.
+      if (!error && data === false && !detenido) {
+        detenido = true
+        guardarSilenciosa(null)
+        setSilenciosa(null)
+      }
+    }
+    void enviar()
+    const t = setInterval(enviar, INTERVALO_GPS_SOS_MS)
+    return () => {
+      detenido = true
+      clearInterval(t)
+    }
+  }, [silenciosa])
+
   /** Envía el SOS. Devuelve un mensaje de error o null. */
   const activar = useCallback(async (): Promise<string | null> => {
     if (!usuarioId) return 'Debes iniciar sesión.'
@@ -153,7 +204,13 @@ export function useSOS(usuarioId: string | undefined, obtenerPos: () => [number,
     const res = data as VerificacionPin
     const rechazo = mensajeRechazoPin(res, 'sos')
     if (rechazo) return rechazo
-    if (res.resultado === 'cancelada') setAlerta(null)
+    if (res.resultado === 'cancelada') {
+      if (res.seguir) {
+        guardarSilenciosa(id)
+        setSilenciosa(id)
+      }
+      setAlerta(null)
+    }
     else {
       // Ya la cerró un operador: mostrar el estado real.
       const { data: actual } = await supabase.from('alertas').select('*').eq('id', id).maybeSingle()

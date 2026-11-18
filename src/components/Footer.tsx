@@ -21,7 +21,7 @@ export default function Footer() {
             <div className="flex flex-col gap-2">
               <span className="font-semibold text-white">Legal</span>
               <a href="#" className="text-slate-400 hover:text-white">Términos</a>
-              <a href="#" className="text-slate-400 hover:text-white">Privacidad</a>
+              <a href="/privacidad" className="text-slate-400 hover:text-white">Privacidad</a>
               <a href="mailto:contacto@cuidachile.cl" className="text-slate-400 hover:text-white">Contacto</a>
             </div>
             <div className="flex flex-col gap-2">

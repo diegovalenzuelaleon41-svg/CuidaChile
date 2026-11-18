@@ -19,6 +19,8 @@ import type { useLlamadaVoz } from '../../hooks/useLlamadaVoz'
 import type { useLinterna, useSirena } from '../../hooks/useAutoproteccion'
 import { formatoDuracion, type EstadoLlamada } from '../../lib/llamadas'
 import { ModalPinCancelarSOS } from './PinSeguridad'
+import AvisarContactos from './AvisarContactos'
+import type { Contacto } from '../../store/usoSeguridad'
 
 /** enviando → activa (esperando operador) → en_atencion; error si no llegó a la central. */
 export type EstadoPantallaSOS = 'enviando' | 'activa' | 'en_atencion' | 'error'
@@ -41,6 +43,11 @@ interface Props {
   onOcultar: () => void
   /** Cancela con el PIN de seguridad. Devuelve un mensaje de error o null. */
   onCancelar: (pin: string) => Promise<string | null>
+  /** La alerta abierta, para el link de seguimiento de los contactos. */
+  alertaId: string | null
+  contactos: Contacto[]
+  /** Modo discreto: sin rojo que llame la atención y sin sirena ni linterna. */
+  discreto: boolean
 }
 
 function capitalizar(nombre: string) {
@@ -65,6 +72,9 @@ export default function PantallaSOS({
   onReintentarEnvio,
   onOcultar,
   onCancelar,
+  alertaId,
+  contactos,
+  discreto,
 }: Props) {
   const [confirmando, setConfirmando] = useState(false)
   const abierta = estado === 'activa' || estado === 'en_atencion'
@@ -87,12 +97,18 @@ export default function PantallaSOS({
       aria-modal="true"
       aria-labelledby="sos-titulo"
       aria-describedby="sos-subtitulo"
-      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950 bg-[radial-gradient(ellipse_at_top,rgba(239,68,68,0.16),transparent_55%)] text-white"
+      className={`fixed inset-0 z-50 overflow-y-auto bg-slate-950 text-white ${
+        discreto ? '' : 'bg-[radial-gradient(ellipse_at_top,rgba(239,68,68,0.16),transparent_55%)]'
+      }`}
     >
       {/* Borde de transmisión: late mientras el SOS está activo */}
       <div
         className={`sticky top-0 z-10 h-1.5 ${
-          estado === 'error' ? 'bg-amber-500' : 'bg-red-500 animate-pulse shadow-[0_0_18px_rgba(239,68,68,0.9)]'
+          estado === 'error'
+            ? 'bg-amber-500'
+            : discreto
+              ? 'bg-slate-700'
+              : 'bg-red-500 animate-pulse shadow-[0_0_18px_rgba(239,68,68,0.9)]'
         }`}
         aria-hidden
       />
@@ -104,10 +120,10 @@ export default function PantallaSOS({
             <h2
               id="sos-titulo"
               className={`flex items-center gap-2.5 text-[34px] font-black leading-none tracking-wide ${
-                estado === 'error' ? 'text-amber-400' : 'text-red-500'
+                estado === 'error' ? 'text-amber-400' : discreto ? 'text-slate-200' : 'text-red-500'
               }`}
             >
-              {estado !== 'error' && (
+              {estado !== 'error' && !discreto && (
                 <span className="relative flex h-3.5 w-3.5 shrink-0" aria-hidden>
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
                   <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-red-500" />
@@ -163,7 +179,11 @@ export default function PantallaSOS({
           }}
         />
 
-        {/* ── 3. Autoprotección ── */}
+        {/* ── 3. Contactos: link para que vean dónde estás ── */}
+        {abierta && <AvisarContactos tipo="sos" objetivo={alertaId ? { alertaId } : null} contactos={contactos} />}
+
+        {/* ── 4. Autoprotección (no en modo discreto: la sirena y la luz delatan) ── */}
+        {!discreto && (
         <section className="mt-7" aria-label="Autoprotección">
           <h3 className="text-center text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Autoprotección</h3>
           <div className="mt-3 flex justify-center gap-10">
@@ -191,8 +211,9 @@ export default function PantallaSOS({
             </BotonHerramienta>
           </div>
         </section>
+        )}
 
-        {/* ── 4. Salidas ── */}
+        {/* ── 5. Salidas ── */}
         <div className="mt-auto pt-8">
           {/* Si el SOS no llegó a la central, el 133 pasa a ser la acción principal */}
           <a
@@ -309,7 +330,7 @@ function TarjetaComunicacion({
     icono = <WifiOff size={22} />
     tono = 'problema'
     titulo = 'No pudimos enviar tu alerta'
-    texto = 'Revisa tu conexión. Si estás en peligro, llama ahora al 133.'
+    texto = 'Reintentamos solos cada pocos segundos y apenas vuelva la señal. Si estás en peligro, llama ahora al 133.'
     accion = (
       <button type="button" onClick={onReintentarEnvio} className={BTN_PRINCIPAL}>
         <RotateCcw size={20} /> Reintentar envío
