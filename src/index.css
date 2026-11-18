@@ -753,3 +753,40 @@ button:active > .icono-alerta {
   opacity: 1;
 }
 
+
+/* ── Guardianes: pulso que viaja del guardián hacia ti, anillos del centro y cambio de ficha ── */
+@keyframes pulso-guardian {
+  0% { stroke-dashoffset: 100; opacity: 0; }
+  10% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.pulso-guardian {
+  stroke-dasharray: 10 90;
+  opacity: 0;
+  animation: pulso-guardian 2.7s cubic-bezier(0.45, 0, 0.55, 1) infinite both;
+}
+@keyframes anillo-guardian {
+  from { transform: scale(1); opacity: 0.6; }
+  to { transform: scale(2.4); opacity: 0; }
+}
+.anillo-guardian {
+  animation: anillo-guardian 3s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes cambio-guardian {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.cambio-guardian {
+  animation: cambio-guardian 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulso-guardian,
+  .anillo-guardian {
+    animation: none;
+    opacity: 0;
+  }
+  .cambio-guardian {
+    animation: none;
+  }
+}
