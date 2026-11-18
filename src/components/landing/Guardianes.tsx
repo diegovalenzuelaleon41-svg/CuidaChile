@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useEnVista } from '../../hooks/useEnVista'
+import Trazo from './Trazo'
 
 type Guardian = {
   nombre: string
@@ -153,7 +154,12 @@ export default function Guardianes() {
           >
             Tu seguridad no depende solo de la tecnología.{' '}
             <span className="bg-gradient-to-r from-cyan-300 to-blue-500 bg-clip-text text-transparent">
-              Hay personas detrás de ella.
+              Hay{' '}
+              <span className="relative inline-block">
+                personas
+                <Trazo retraso={500} />
+              </span>{' '}
+              detrás de ella.
             </span>
           </h2>
           <p className="mt-5 max-w-[46ch] text-pretty text-base text-slate-400">

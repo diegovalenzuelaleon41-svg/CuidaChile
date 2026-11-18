@@ -8,8 +8,9 @@ import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 maplibregl.config.WORKER_URL = mapWorkerUrl
 import {
   Briefcase, CheckCircle2, ChevronRight, Clock3, Crosshair, Home, KeyRound, LocateFixed, MapPin, MapPinned,
-  MessageCircle, Minus, Moon, Navigation, Plus, Search, ShieldCheck, Star, Sun, X,
+  MessageCircle, Minus, Moon, Navigation, Plus, Search, ShieldCheck, Star, Sun, Volume2, X,
 } from 'lucide-react'
+import { callar, guardarPreferenciaVoz, hablar, leerPreferenciaVoz, vozDisponible } from '../lib/voz'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../hooks/useTheme'
 import { supabase } from '../lib/supabase'
@@ -290,6 +291,12 @@ export default function Usuario() {
   const [solicitandoRuta, setSolicitandoRuta] = useState(false)
   // SOS real (tabla alertas + Realtime): mismo GPS real que el acompañamiento.
   const sos = useSOS(user?.id, () => gpsRealRef.current)
+  // Avisos hablados del SOS: opcionales y apagados por defecto (src/lib/voz.ts).
+  const [vozSOS, setVozSOS] = useState(leerPreferenciaVoz)
+  const vozSOSRef = useRef(vozSOS)
+  useEffect(() => {
+    vozSOSRef.current = vozSOS
+  }, [vozSOS])
   // Llamada de voz con la central (LiveKit), ligada al SOS abierto.
   const { sesion: sesionLlamada } = useSesionLlamada(sos.alerta?.id ?? null)
   const voz = useLlamadaVoz(sesionLlamada)
@@ -1281,8 +1288,14 @@ export default function Usuario() {
     setSosError(false)
     // Ya hay una abierta: solo volver a mostrar su estado.
     if (sos.abierta) return
+    // Se dice algo ya, dentro del toque: iOS solo deja hablar si la voz arranca con un gesto.
+    if (vozSOSRef.current) hablar('Enviando alerta.')
     const error = await sos.activar()
     if (error) setSosError(true)
+    if (!vozSOSRef.current) return
+    if (error) hablar('No pudimos enviar tu alerta. Vuelve a intentarlo.')
+    else if (gpsRealRef.current) hablar('Alerta enviada. La central ya ve dónde estás.')
+    else hablar('Alerta enviada a la central. Todavía no tenemos tu ubicación.')
   }
 
   /** Devuelve el error para mostrarlo en el modal del PIN (la alerta sigue activa). */
@@ -1295,6 +1308,7 @@ export default function Usuario() {
     setShowChatSOS(false)
     sirena.detener()
     linterna.apagar()
+    callar()
     setTab('inicio')
     setAviso('Alerta SOS cancelada.')
     return null
@@ -1312,6 +1326,17 @@ export default function Usuario() {
     sosMostradoRef.current = sos.alerta.id
     setShowSosModal(true)
   }, [sos.alerta, sos.abierta])
+
+  // Un operador tomó la alerta: decirlo una vez por alerta.
+  const atencionDichaRef = useRef<string | null>(null)
+  const idSos = sos.alerta?.id
+  const operadorSos = sos.alerta?.operador_nombre
+  useEffect(() => {
+    if (sos.alerta?.estado !== 'en_atencion' || !idSos || atencionDichaRef.current === idSos) return
+    atencionDichaRef.current = idSos
+    if (!vozSOSRef.current) return
+    hablar(operadorSos ? `${operadorSos}, de la central, está atendiendo tu alerta.` : 'Un operador está atendiendo tu alerta.')
+  }, [sos.alerta?.estado, idSos, operadorSos])
 
   // La central cerró la alerta: avisar y volver al estado normal.
   const estadoSos = sos.alerta?.estado
@@ -2439,6 +2464,39 @@ export default function Usuario() {
                       />
                     </span>
                   </button>
+                  {vozDisponible() && (
+                    <button
+                      onClick={() => {
+                        const activa = !vozSOS
+                        setVozSOS(activa)
+                        guardarPreferenciaVoz(activa)
+                        if (activa) hablar('Avisos por voz activados.')
+                        else callar()
+                      }}
+                      aria-pressed={vozSOS}
+                      className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <span className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-[#93C5FD] flex items-center justify-center shrink-0">
+                        <Volume2 size={19} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[14px] font-semibold text-heading dark:text-white">Avisos por voz en el SOS</span>
+                        <span className="block text-[12px] text-muted dark:text-slate-400">
+                          {vozSOS
+                            ? 'Te decimos en voz alta cuando tu alerta llega y cuando la atienden'
+                            : 'Desactivado. Úsalo solo si hablar en voz alta no te pone en riesgo'}
+                        </span>
+                      </span>
+                      <span
+                        className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${vozSOS ? 'bg-brand-600' : 'bg-line dark:bg-slate-700'}`}
+                        aria-hidden
+                      >
+                        <span
+                          className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${vozSOS ? 'left-[22px]' : 'left-0.5'}`}
+                        />
+                      </span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setPinPerfil('cambiar')}
                     className="card w-full p-4 flex items-center gap-3 text-left hover:bg-canvas dark:hover:bg-slate-800 transition-colors"

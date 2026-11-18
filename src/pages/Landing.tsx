@@ -15,6 +15,7 @@ import Testimonios from '../components/landing/Testimonios'
 import Privacidad from '../components/landing/Privacidad'
 import ContadorEnVivo from '../components/landing/ContadorEnVivo'
 import Guardianes from '../components/landing/Guardianes'
+import Trazo from '../components/landing/Trazo'
 import { useParallax } from '../hooks/useParallax'
 
 /** Solo datos que la app cumple hoy (ver Funciones y QuienResponde). */
@@ -54,8 +55,11 @@ export default function Landing() {
                 Tu vuelta a casa,
                 <br />
                 {/* inline-block + pb: el degradado recortado al texto no corta las letras con descendente (p, g) */}
-                <span className="inline-block bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text pb-[0.08em] text-transparent">
-                  siempre acompañada.
+                <span className="relative inline-block">
+                  <span className="inline-block bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text pb-[0.08em] text-transparent">
+                    siempre acompañada.
+                  </span>
+                  <Trazo retraso={600} />
                 </span>
               </h1>
 
