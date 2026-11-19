@@ -14,6 +14,7 @@ import FraseRevelada from '../components/landing/FraseRevelada'
 import Cifras from '../components/landing/Cifras'
 import Testimonios from '../components/landing/Testimonios'
 import Privacidad from '../components/landing/Privacidad'
+import Precios from '../components/landing/Precios'
 import ContadorEnVivo from '../components/landing/ContadorEnVivo'
 import Guardianes from '../components/landing/Guardianes'
 import Trazo from '../components/landing/Trazo'
@@ -155,6 +156,7 @@ export default function Landing() {
         <Testimonios />
         {/* Sin operadores reales no se muestra en producción (ver REALES en Guardianes.tsx) */}
         <Guardianes />
+        <Precios />
         <CtaFinal />
       </main>
       <Footer />
